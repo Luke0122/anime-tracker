@@ -1,0 +1,14 @@
+{
+  "base_dir": "D:\\ANIME\\日本TV动画信息",
+  "mail_to": "your-email@example.com",
+  "smtp_host": "smtp.qq.com",
+  "smtp_port": 465,
+  "smtp_user": "your-email@example.com",
+  "smtp_auth_code": "REPLACE_WITH_YOUR_SMTP_AUTH_CODE",
+  "request_delay": 1.2,
+  "max_voice_actors": 8,
+  "top_tags": 10,
+  "send_email": true,
+  "mail_cc": [],
+  "mail_extra_to": []
+}

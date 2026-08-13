@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>番剧记录</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand"><span class="brand-mark">▶</span><span>番剧记录</span></div>
+    <nav id="nav">
+      <button class="nav-item" data-view="stats">📊 统计</button>
+      <button class="nav-item" data-view="all">🗂 全部番剧</button>
+      <div class="nav-label">季度</div>
+      <div id="season-nav"></div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-item" data-view="settings">⚙️ 设置</button>
+      <div id="data-path" class="data-path"></div>
+    </div>
+  </aside>
+  <main id="main">
+    <header id="topbar">
+      <input id="search" type="search" placeholder="搜索番名…" autocomplete="off" />
+      <select id="status-filter">
+        <option value="">全部状态</option>
+        <option value="watching">在看</option>
+        <option value="completed">看完</option>
+        <option value="on_hold">搁置</option>
+        <option value="dropped">弃番</option>
+        <option value="plan">想看</option>
+      </select>
+      <button id="btn-add" class="btn btn-primary">＋ 添加番剧</button>
+      <div class="dropdown-wrap">
+        <button id="btn-menu" class="btn">导入 / 导出 ▾</button>
+        <div id="menu-dropdown" class="dropdown hidden">
+          <button data-action="import-excel">📥 导入 Excel 记录…</button>
+          <button data-action="import-json">📥 导入 JSON 备份…</button>
+          <button data-action="scan">📂 扫描下载目录…</button>
+          <button data-action="export-excel">📤 导出 Excel…</button>
+          <button data-action="export-json">💾 导出 JSON 备份…</button>
+        </div>
+      </div>
+    </header>
+    <section id="content"></section>
+  </main>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<script src="app.js"></script>
+</body>
+</html>

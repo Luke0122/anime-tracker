@@ -1,0 +1,49 @@
+{
+  "name": "anime-tracker",
+  "productName": "番剧记录",
+  "version": "0.1.0",
+  "description": "记录每季度追番与集数进度的桌面应用（全离线）",
+  "author": "sah10",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder --win portable"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "exceljs": "^4.4.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.sah10.animetracker",
+    "productName": "番剧记录",
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "番剧记录.exe"
+    },
+    "npmRebuild": false
+  }
+}

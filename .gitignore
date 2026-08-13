@@ -1,0 +1,13 @@
+# 本地配置（含邮箱 SMTP 授权码，切勿上传）
+config.json
+
+# Python 运行产物
+__pycache__/
+*.pyc
+
+# 运行缓存 / 日志 / 构建产物
+_runtime/
+*.log
+node_modules/
+dist/
+data/
