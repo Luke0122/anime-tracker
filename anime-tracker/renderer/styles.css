@@ -8,9 +8,9 @@
   --text: #e9e9f2;
   --text-muted: #9a9aab;
   --text-dim: #6f6f7e;
-  --accent: #3d8bff;
-  --accent-2: #7db4ff;
-  --accent-3: #5b9bff;
+  --accent: #f89164;
+  --accent-2: #f7b9a0;
+  --accent-3: #e87a52;
   --green: #7ee2a8;
   --orange: #f7c784;
   --red: #f08a8a;
@@ -91,7 +91,7 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 }
 .nav-item:hover { background: var(--panel); color: var(--text); }
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(61, 139, 255, 0.20), rgba(37, 99, 235, 0.12));
+  background: linear-gradient(135deg, rgba(248, 145, 100, 0.20), rgba(224, 103, 74, 0.12));
   color: var(--text);
   font-weight: 600;
 }
@@ -162,13 +162,13 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 }
 .btn:hover { background: var(--panel-hover); border-color: var(--border-strong); }
 .btn-primary {
-  background: linear-gradient(135deg, #3d8bff, #2563eb);
+  background: linear-gradient(135deg, #f89164, #e0674a);
   border: none;
   color: #fff;
   font-weight: 600;
   margin-left: auto;
 }
-.btn-primary:hover { filter: brightness(1.12); background: linear-gradient(135deg, #3d8bff, #2563eb); }
+.btn-primary:hover { filter: brightness(1.12); background: linear-gradient(135deg, #f89164, #e0674a); }
 .btn-danger { background: rgba(240, 138, 138, 0.12); border-color: rgba(240, 138, 138, 0.3); color: var(--red); }
 .btn-danger:hover { background: rgba(240, 138, 138, 0.2); }
 
@@ -242,7 +242,7 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
   width: 52px;
   height: 70px;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(61,139,255,0.22), rgba(37,99,235,0.18));
+  background: linear-gradient(135deg, rgba(248,145,100,0.22), rgba(224,103,74,0.18));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,7 +264,7 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 .st-completed { background: rgba(138, 180, 248, 0.15); color: var(--blue); }
 .st-hold { background: rgba(247, 199, 132, 0.15); color: var(--orange); }
 .st-dropped { background: rgba(154, 160, 166, 0.16); color: #b9bec6; }
-.st-plan { background: rgba(61, 139, 255, 0.16); color: var(--accent); }
+.st-plan { background: rgba(248, 145, 100, 0.16); color: var(--accent); }
 
 .progress-wrap { display: flex; align-items: center; gap: 10px; }
 .progress {

@@ -128,22 +128,22 @@ function importExcel(filePath) {
 /* ================= 导出（样式化） ================= */
 
 const C = {
-  header: 'FF3D8BFF',
+  header: 'FFF89164',
   headerText: 'FFFFFFFF',
   titleText: 'FF3A3547',
   subText: 'FF8A8598',
-  section: 'FFEAF2FF',
-  sectionText: 'FF2B5CB8',
-  border: 'FFD6E4F8',
-  alt: 'FFF5F9FF',
-  accent: 'FF2F6FD6',
+  section: 'FFFDF1E7',
+  sectionText: 'FFA34D28',
+  border: 'FFF2DDCE',
+  alt: 'FFFFF8F3',
+  accent: 'FFE0674A',
 };
 const STATUS_COLORS = {
   watching: 'FF2F9E63',
   completed: 'FF3D6FD6',
   on_hold: 'FFD98B2B',
   dropped: 'FF8B8B93',
-  plan: 'FF3D8BFF',
+  plan: 'FFF89164',
 };
 
 function baseBorder() {
@@ -372,7 +372,7 @@ async function exportExcel(filePath, anime) {
         minLength: 0,
         maxLength: 100,
         cfvo: [{ type: 'min' }, { type: 'max' }],
-        color: { argb: 'FF3D8BFF' },
+        color: { argb: 'FFF89164' },
       }],
     });
   }

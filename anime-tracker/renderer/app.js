@@ -390,7 +390,7 @@ function formHTML() {
     <div class="form-field"><label>每周更新日</label><select id="f-day">${dayOpts}</select></div>
     <div class="form-field"><label>我的评分（1-10）</label><select id="f-rating">${ratingOpts}</select></div>
     <div class="form-field full"><label>短评（可选）</label><textarea id="f-comment" placeholder="一句话记录观感…"></textarea></div>
-    <div class="form-field full"><label>关联下载文件夹（可选，多个用分号隔开）</label><input id="f-folders" type="text" placeholder="如 D:\\AnimeDownloads" /></div>
+    <div class="form-field full"><label>关联下载文件夹（可选，多个用分号隔开）</label><input id="f-folders" type="text" placeholder="如 D:\\ANIME\\花织" /></div>
   </div>
   <div class="form-actions">
     ${isEdit ? '<button class="btn btn-danger" data-action="delete">删除</button>' : ''}
@@ -664,7 +664,7 @@ function openScanModal() {
     <div class="modal-body">
       <div class="hint">扫描文件夹里的视频文件（mp4 / mkv / rmvb 等），自动识别番名和已下载集数，并与你的记录比对。</div>
       <div class="row">
-        <input id="s-path" type="text" placeholder="文件夹路径，如 D:\\AnimeDownloads" />
+        <input id="s-path" type="text" placeholder="文件夹路径，如 D:\\ANIME\\花织" />
         <button class="btn" data-action="scan-run">扫描</button>
         <button class="btn btn-primary" data-action="scan-pick">选择文件夹…</button>
       </div>

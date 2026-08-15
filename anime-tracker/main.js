@@ -31,10 +31,11 @@ function createWindow() {
     minHeight: 640,
     title: '番剧记录',
     backgroundColor: '#000000',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#000000',
-      symbolColor: '#c8d6ff',
+      symbolColor: '#ffd9c9',
       height: 44,
     },
     show: false,
@@ -113,7 +114,7 @@ function registerIpc() {
   ipcMain.handle('scan:pickFolder', handle(async () => {
     const r = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
-      title: '选择要扫描的下载目录（如 D:\\AnimeDownloads）',
+      title: '选择要扫描的下载目录（如 D:\\ANIME\\花织）',
     });
     if (r.canceled || !r.filePaths.length) return null;
     const result = scanner.scanFolder(r.filePaths[0]);
