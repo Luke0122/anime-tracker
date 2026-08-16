@@ -70,3 +70,16 @@ test('loadSeasonList prefers season-folder JSON over docx', () => {
   assert.equal(res.items[0].eps, 12);
   fs.rmSync(base, { recursive: true, force: true });
 });
+
+
+test('loadSeasonList falls back to bundled yuc catalog for old seasons', () => {
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-empty-'));
+  const res = seasonData.loadSeasonList(base, '2020-01');
+  assert.equal(res.source, 'bundled-catalog');
+  assert.ok(res.items.length >= 30, '2020-01 should have many shows, got ' + res.items.length);
+  assert.ok(res.items[0].title);
+  fs.rmSync(base, { recursive: true, force: true });
+});

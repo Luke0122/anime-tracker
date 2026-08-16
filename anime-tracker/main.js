@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Store } = require('./lib/store');
@@ -8,6 +8,13 @@ const seasonData = require('./lib/seasonData');
 const scanner = require('./lib/scanner');
 const bangumi = require('./lib/bangumi');
 const excel = require('./lib/excel');
+const backup = require('./lib/backup');
+const DEFAULT_BACKUP_FOLDER = 'D:\\ANIME\\anime-tracker\\自动备份';
+
+// 注册封面自定义协议（从应用包内读取内置封面）
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'cover', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 app.setName('番剧记录');
 // 数据目录保持稳定，避免改名后丢失已有数据（%APPDATA%\anime-tracker）
@@ -106,7 +113,10 @@ function registerIpc() {
     return all;
   }));
 
-  ipcMain.handle('season:shows', handle((key) => seasonData.loadSeasonList(infoBase(), key)));
+  ipcMain.handle('season:shows', handle((key) => {
+    if (key === 'all') return seasonData.loadAllShows(infoBase());
+    return seasonData.loadSeasonList(infoBase(), key);
+  }));
 
   ipcMain.handle('bangumi:search', handle((keyword) => bangumi.search(keyword)));
   ipcMain.handle('bangumi:detail', handle((id) => bangumi.detail(id)));
@@ -145,6 +155,17 @@ function registerIpc() {
 
   ipcMain.handle('excel:importApply', handle((items) => store.addMany(items)));
 
+  ipcMain.handle('data:exportChart', handle(async (dataUrl) => {
+    const r = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `番剧记录-统计-${new Date().toISOString().slice(0, 10)}.png`,
+      filters: [{ name: 'PNG 图片', extensions: ['png'] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    const base64 = String(dataUrl || '').replace(/^data:image\/png;base64,/, '');
+    fs.writeFileSync(r.filePath, Buffer.from(base64, 'base64'));
+    return r.filePath;
+  }));
+
   ipcMain.handle('data:exportExcel', handle(async () => {
     const r = await dialog.showSaveDialog(mainWindow, {
       defaultPath: `番剧记录-${new Date().toISOString().slice(0, 10)}.xlsx`,
@@ -172,6 +193,17 @@ function registerIpc() {
 
   ipcMain.handle('data:importJsonApply', handle((filePath) => store.importBackup(filePath)));
 
+  ipcMain.handle('backup:now', handle(() => {
+    const cfg = store.getSettings().autoBackup || {};
+    const folder = cfg.folder || DEFAULT_BACKUP_FOLDER;
+    const keep = Number(cfg.keep) || 30;
+    const filePath = backup.exportDataFile(store.data, folder, keep);
+    store.updateSettings({
+      autoBackup: { ...cfg, enabled: !!cfg.enabled, interval: cfg.interval || 'daily', folder, keep, lastAt: new Date().toISOString() },
+    });
+    return { path: filePath };
+  }));
+
   ipcMain.handle('data:exportJson', handle(async () => {
     const r = await dialog.showSaveDialog(mainWindow, {
       defaultPath: `番剧记录-备份-${new Date().toISOString().slice(0, 10)}.json`,
@@ -191,6 +223,29 @@ app.whenReady().then(() => {
   if (!settings.animeInfoBaseDir) {
     store.updateSettings({ animeInfoBaseDir: DEFAULT_INFO_BASE });
   }
+  protocol.handle('cover', async (request) => {
+    try {
+      const u = new URL(request.url);
+      const filePath = path.join(__dirname, 'data', 'covers', path.basename(u.pathname));
+      const data = await fs.promises.readFile(filePath);
+      return new Response(data, { headers: { 'Content-Type': 'image/jpeg' } });
+    } catch (_) {
+      return new Response('', { status: 404 });
+    }
+  });
+  function checkAutoBackup() {
+    const cfg = store.getSettings().autoBackup || {};
+    if (!backup.isDue(cfg)) return null;
+    const folder = cfg.folder || DEFAULT_BACKUP_FOLDER;
+    const keep = Number(cfg.keep) || 30;
+    const filePath = backup.exportDataFile(store.data, folder, keep);
+    store.updateSettings({
+      autoBackup: { ...cfg, enabled: !!cfg.enabled, interval: cfg.interval || 'daily', folder, keep, lastAt: new Date().toISOString() },
+    });
+    return filePath;
+  }
+  checkAutoBackup();
+  setInterval(checkAutoBackup, 30 * 60 * 1000);
   registerIpc();
   createWindow();
     app.on('activate', () => {

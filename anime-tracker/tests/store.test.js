@@ -141,3 +141,56 @@ test('parseBackupFile rejects invalid input', () => {
   fs.writeFileSync(bad, JSON.stringify({ foo: 1 }), 'utf8');
   assert.throws(() => s.parseBackupFile(bad), /anime/);
 });
+
+
+test('bump records watch time automatically', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '记录番', season: '2025-04', status: 'watching', episode: 2, totalEpisodes: 12 });
+  const b = s.bump(a.id);
+  assert.equal(b.episode, 3);
+  assert.ok(Array.isArray(b.watchLog));
+  assert.equal(b.watchLog.length, 1);
+  assert.equal(b.watchLog[0].episode, 3);
+  assert.ok(!Number.isNaN(new Date(b.watchLog[0].at).getTime()));
+});
+
+test('update accepts and validates watchLog', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '记录番', season: '2025-04', status: 'watching', episode: 1 });
+  const u = s.update(a.id, {
+    watchLog: [
+      { episode: 1, at: '2025-04-01T20:30:00.000Z' },
+      { episode: 0, at: '2025-04-02T20:30:00.000Z' },
+      { episode: 2, at: 'invalid' },
+      { episode: 3, at: '2025-04-03T21:00:00.000Z' },
+    ],
+  });
+  assert.equal(u.watchLog.length, 2);
+  assert.equal(u.watchLog[0].episode, 1);
+  assert.equal(u.watchLog[1].episode, 3);
+});
+
+
+test('bump completing marks all episodes watched', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '全集番', season: '2025-04', status: 'watching', episode: 10, totalEpisodes: 12 });
+  const b = s.bump(a.id);
+  assert.equal(b.status, 'watching');
+  const c = s.bump(b.id);
+  assert.equal(c.status, 'completed');
+  const eps = c.watchLog.map((x) => x.episode).sort((x, y) => x - y);
+  assert.deepEqual(eps, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+});
+
+
+test('add rejects duplicate title in same season', () => {
+  const s = tmpStore();
+  s.load();
+  s.add({ title: 'A', season: '2024-04', status: 'plan', episode: 0 });
+  assert.throws(() => s.add({ title: 'A', season: '2024-04', status: 'watching', episode: 1 }), /已存在/);
+  const b = s.add({ title: 'A', season: '2024-07', status: 'plan', episode: 0 });
+  assert.equal(s.count(), 2);
+});

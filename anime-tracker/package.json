@@ -29,6 +29,8 @@
       "lib/**/*",
       "renderer/**/*",
       "build/icon.png",
+      "data/yuc-catalog.json",
+      "data/covers/**",
       "package.json"
     ],
     "directories": {

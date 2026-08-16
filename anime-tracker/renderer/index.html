@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: cover:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
 <title>番剧记录</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -31,6 +31,10 @@
         <option value="on_hold">搁置</option>
         <option value="dropped">弃番</option>
         <option value="plan">想看</option>
+      </select>
+      <select id="sort-order" title="排序方式">
+        <option value="season">按季度</option>
+        <option value="recent">按最近观看</option>
       </select>
       <button id="btn-add" class="btn btn-primary">＋ 添加番剧</button>
       <div class="dropdown-wrap">

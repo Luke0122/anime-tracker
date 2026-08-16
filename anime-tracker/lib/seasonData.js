@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const docxParser = require('./docxParser');
 const { WEEKDAY_TO_NUM } = require('./labels');
 
@@ -73,6 +74,19 @@ function findSeasonJsonInFolder(folder) {
   files = files.filter((f) => /新番信息.*\.json$/i.test(f)).sort();
   if (!files.length) return null;
   return path.join(folder, files[files.length - 1]);
+}
+
+// 内置的 yuc.wiki 历史季度目录（2019-10 至 2026-07，随应用打包）
+const BUNDLED_CATALOG = path.join(__dirname, '..', 'data', 'yuc-catalog.json');
+let bundledCatalogCache = null;
+function getBundledCatalog() {
+  if (bundledCatalogCache) return bundledCatalogCache;
+  try {
+    bundledCatalogCache = JSON.parse(fs.readFileSync(BUNDLED_CATALOG, 'utf8'));
+  } catch (_) {
+    bundledCatalogCache = { seasons: {} };
+  }
+  return bundledCatalogCache;
 }
 
 function weekdayNum(wd) {
@@ -154,12 +168,62 @@ function loadSeasonList(baseDir, seasonKey) {
     } catch (e) { errors.push('yuc JSON 解析失败: ' + e.message); }
   }
 
+  // 内置 yuc.wiki 历史目录兜底（随应用打包，无需联网）
+  const catalog = getBundledCatalog();
+  const seasonData = catalog.seasons && catalog.seasons[seasonKey.replace('-', '')];
+  if (seasonData && Array.isArray(seasonData.shows) && seasonData.shows.length) {
+    const items = seasonData.shows.map((x) => ({
+      title: x.title || '',
+      weekday: x.weekday || null,
+      weekdayNum: weekdayNum(x.weekday),
+      time: x.time || null,
+      eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
+      region: x.region || null,
+      coverUrl: x.cover
+        ? `cover://local/${path.basename(x.cover)}`
+        : (x.coverUrl || null),
+    })).filter((x) => x.title);
+    if (items.length) return { source: 'bundled-catalog', items, meta: {} };
+  }
+
   return { source: 'none', items: [], errors };
+}
+
+function loadAllShows(baseDir) {
+  const out = [];
+  const catalog = getBundledCatalog();
+  const seasonKeys = Object.keys(catalog.seasons || {}).sort();
+  for (const yyyymm of seasonKeys) {
+    const key = `${yyyymm.slice(0, 4)}-${yyyymm.slice(4)}`;
+    let items = null;
+    const jp = seasonJsonPath(baseDir, key);
+    if (fs.existsSync(jp)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(jp, 'utf8'));
+        items = (data.items || []).map(normalizeBangumiItem).filter((x) => x && x.title);
+      } catch (_) { items = null; }
+    }
+    if (!items) {
+      const sd = catalog.seasons[yyyymm];
+      items = ((sd && sd.shows) || []).map((x) => ({
+        title: x.title || '',
+        weekday: x.weekday || null,
+        weekdayNum: weekdayNum(x.weekday),
+        time: x.time || null,
+        eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
+        region: x.region || null,
+        coverUrl: x.cover ? `cover://local/${path.basename(x.cover)}` : (x.coverUrl || null),
+      })).filter((x) => x.title);
+    }
+    for (const it of items) out.push({ ...it, season: key });
+  }
+  return { source: 'all', items: out };
 }
 
 module.exports = {
   discoverSeasons,
   loadSeasonList,
+  loadAllShows,
   currentSeasonKey,
   keyToLabel,
   findSeasonJsonInFolder,

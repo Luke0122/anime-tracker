@@ -143,12 +143,17 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 }
 #search:focus { border-color: var(--accent); }
 
-#status-filter {
+#topbar select {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   outline: none;
+  color: var(--text);
+}
+#topbar select option {
+  background: var(--panel);
+  color: var(--text);
 }
 
 .btn {
@@ -362,15 +367,24 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 .settings-panel { max-width: 620px; }
 .settings-panel .field { margin-bottom: 18px; }
 .settings-panel label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 7px; }
-.settings-panel input[type="text"] {
+.settings-panel input[type="text"],
+.settings-panel input[type="number"],
+.settings-panel select {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
   outline: none;
+  color: var(--text);
 }
-.settings-panel input[type="text"]:focus { border-color: var(--accent); }
+.settings-panel input[type="text"]:focus,
+.settings-panel input[type="number"]:focus,
+.settings-panel select:focus { border-color: var(--accent); }
+.settings-panel .row input[type="text"],
+.settings-panel .row input[type="number"] { width: auto; flex: 1; min-width: 0; }
+.settings-panel .row select { width: auto; flex: 0 0 auto; }
+.settings-panel .row input[type="number"] { flex: 0 0 90px; }
 .settings-box {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -535,4 +549,38 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+
+/* ---------- 观看记录（每集按钮） ---------- */
+.watch-log-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.ep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.ep-btn:hover { border-color: var(--accent); color: var(--text); }
+.ep-btn.watched {
+  background: rgba(248, 145, 100, 0.16);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.ep-num { white-space: nowrap; }
+.ep-time {
+  width: 150px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  color: var(--text);
+  font-size: 11.5px;
+  outline: none;
+}
 

@@ -58,6 +58,14 @@ function validateEntry(input) {
     if (!Number.isInteger(updateDay) || updateDay < 0 || updateDay > 6) errs.push('更新日必须在 0-6 之间');
   }
 
+  let watchLog = e.watchLog;
+  if (!Array.isArray(watchLog)) watchLog = [];
+  watchLog = watchLog
+    .filter((x) => x && Number.isInteger(Number(x.episode)) && Number(x.episode) > 0 && x.at
+      && !Number.isNaN(new Date(x.at).getTime()))
+    .map((x) => ({ episode: Number(x.episode), at: String(x.at) }))
+    .slice(-300);
+
   return {
     errors: errs,
     entry: {
@@ -74,6 +82,7 @@ function validateEntry(input) {
       bgmUrl: e.bgmUrl || null,
       coverUrl: e.coverUrl || null,
       summary: e.summary || null,
+      watchLog,
     },
   };
 }
@@ -177,6 +186,8 @@ class Store {
   add(input) {
     const { errors, entry } = validateEntry(input);
     if (errors.length) throw new Error(errors.join('；'));
+    const exists = this.data.anime.some((a) => a.title === entry.title && a.season === entry.season);
+    if (exists) throw new Error(`\u5df2\u5b58\u5728\u300c${entry.title}\u300d\uff08${entry.season}\uff09`);
     const now = nowIso();
     const item = {
       id: crypto.randomUUID(),
@@ -228,13 +239,30 @@ class Store {
     this.save();
   }
 
+  // 状态变为「看完」时，把所有集数补进已看记录（缺失的集用同一时间戳补上）
+  _ensureAllWatched(log, totalEpisodes) {
+    const arr = log || [];
+    if (!totalEpisodes || totalEpisodes < 1) return arr;
+    const map = new Map(arr.map((e) => [e.episode, e.at]));
+    const now = nowIso();
+    for (let ep = 1; ep <= totalEpisodes; ep++) {
+      if (!map.has(ep)) map.set(ep, now);
+    }
+    return Array.from(map.entries()).map(([episode, at]) => ({ episode, at }));
+  }
+
   bump(id) {
     const a = this.get(id);
     if (!a) throw new Error('条目不存在');
     const next = (a.episode || 0) + 1;
-    const patch = { episode: next };
-    if (a.totalEpisodes && next >= a.totalEpisodes) patch.status = 'completed';
-    return this.update(id, patch);
+    const completed = !!(a.totalEpisodes && next >= a.totalEpisodes);
+    let watchLog = [...(a.watchLog || []), { episode: next, at: nowIso() }];
+    if (completed) watchLog = this._ensureAllWatched(watchLog, a.totalEpisodes);
+    return this.update(id, {
+      episode: next,
+      status: completed ? 'completed' : a.status,
+      watchLog,
+    });
   }
 
 

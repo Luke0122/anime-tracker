@@ -19,6 +19,8 @@ const api = {
   importExcelApply: (items) => ipcRenderer.invoke('excel:importApply', items),
   exportExcel: () => ipcRenderer.invoke('data:exportExcel'),
   exportJson: () => ipcRenderer.invoke('data:exportJson'),
+  backupNow: () => ipcRenderer.invoke('backup:now'),
+  exportChart: (dataUrl) => ipcRenderer.invoke('data:exportChart', dataUrl),
   importJson: () => ipcRenderer.invoke('data:importJson'),
   importJsonApply: (filePath) => ipcRenderer.invoke('data:importJsonApply', filePath),
 
