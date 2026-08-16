@@ -113,9 +113,10 @@ function registerIpc() {
     return all;
   }));
 
-  ipcMain.handle('season:shows', handle((key) => {
+  ipcMain.handle('season:shows', handle(async (key) => {
     if (key === 'all') return seasonData.loadAllShows(infoBase());
-    return seasonData.loadSeasonList(infoBase(), key);
+    const cacheDir = path.join(app.getPath('userData'), 'yuc-cache');
+    return seasonData.loadSeasonListLive(infoBase(), key, cacheDir);
   }));
 
   ipcMain.handle('bangumi:search', handle((keyword) => bangumi.search(keyword)));

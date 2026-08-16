@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const docxParser = require('./docxParser');
+const yucLive = require('./yucLive');
 const { WEEKDAY_TO_NUM } = require('./labels');
 
 const SEASON_DIR_RE = /^(\d{4})年(\d{1,2})月$/;
@@ -144,30 +144,6 @@ function loadSeasonList(baseDir, seasonKey) {
       if (items.length) return { source: 'season-json', items, meta: { json: seasonJson } };
     } catch (e) { errors.push('\u5b63\u5ea6 JSON \u89e3\u6790\u5931\u8d25: ' + e.message); }
   }
-  const docx = season ? findDocxInFolder(season.folder) : null;
-  if (docx) {
-    try {
-      const items = docxParser.parseNewAnimeDocx(docx);
-      if (items.length) return { source: 'docx', items, meta: { docx } };
-    } catch (e) { errors.push('docx 解析失败: ' + e.message); }
-  }
-
-  const yp = yucJsonPath(baseDir, seasonKey);
-  if (fs.existsSync(yp)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(yp, 'utf8'));
-      const items = (data.shows || []).map((x) => ({
-        title: x.title || '',
-        weekday: x.weekday || null,
-        weekdayNum: weekdayNum(x.weekday),
-        time: x.time || null,
-        eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
-        region: x.region || null,
-      })).filter((x) => x.title);
-      if (items.length) return { source: 'yuc-json', items, meta: {} };
-    } catch (e) { errors.push('yuc JSON 解析失败: ' + e.message); }
-  }
-
   // 内置 yuc.wiki 历史目录兜底（随应用打包，无需联网）
   const catalog = getBundledCatalog();
   const seasonData = catalog.seasons && catalog.seasons[seasonKey.replace('-', '')];
@@ -220,9 +196,32 @@ function loadAllShows(baseDir) {
   return { source: 'all', items: out };
 }
 
+// 每季度从 yuc.wiki 实时获取（带缓存）；失败时回退到离线数据（本地 JSON → 内置目录）
+async function loadSeasonListLive(baseDir, seasonKey, cacheDir) {
+  if (!SEASON_RE.test(String(seasonKey || ''))) throw new Error('无效季度: ' + seasonKey);
+  const yyyymm = String(seasonKey).replace('-', '');
+  try {
+    const shows = await yucLive.fetchSeason(yyyymm, cacheDir);
+    if (shows && shows.length) {
+      const items = shows.map((x) => ({
+        title: x.title || '',
+        weekday: x.weekday || null,
+        weekdayNum: weekdayNum(x.weekday),
+        time: x.time || null,
+        eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
+        region: x.region || null,
+        coverUrl: x.coverUrl || null,
+      })).filter((x) => x.title);
+      if (items.length) return { source: 'yuc-live', items, meta: {} };
+    }
+  } catch (_) { /* 走离线兜底 */ }
+  return loadSeasonList(baseDir, seasonKey);
+}
+
 module.exports = {
   discoverSeasons,
   loadSeasonList,
+  loadSeasonListLive,
   loadAllShows,
   currentSeasonKey,
   keyToLabel,
