@@ -76,4 +76,4 @@ anime-tracker/
 
 ## License
 
-[MIT](LICENSE)
+MIT License
