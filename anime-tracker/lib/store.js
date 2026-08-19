@@ -77,6 +77,8 @@ function validateEntry(input) {
       rating,
       updateDay,
       comment: e.comment ? String(e.comment) : '',
+      studio: e.studio ? String(e.studio).trim() : '',
+      tags: e.tags ? String(e.tags).trim() : '',
       folders: Array.isArray(e.folders) ? e.folders.filter((f) => f && String(f).trim()) : [],
       bgmId: e.bgmId || null,
       bgmUrl: e.bgmUrl || null,

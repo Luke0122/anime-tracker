@@ -589,3 +589,17 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 .pick-item.added { opacity: 0.62; cursor: default; }
 .pick-item.added:hover { background: transparent; }
 .st-added { background: rgba(196, 167, 231, 0.15); color: #c9a9e8; }
+/* ---------- Stats 图表 ---------- */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.chart-card h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; }
+.chart-card canvas { width: 100%; height: auto; display: block; }

@@ -78,6 +78,23 @@ function itemImage(s) {
   return (s.images && (s.images.large || s.images.common || s.images.medium)) || null;
 }
 
+// 从 Bangumi infobox 提取制作公司（动画制作 / 制作 / スタジオ）
+function studioFromInfobox(infobox) {
+  const rows = Array.isArray(infobox) ? infobox : [];
+  for (const row of rows) {
+    if (!/动画制作|制作|スタジオ/.test(String(row.key || ''))) continue;
+    const v = row.value;
+    if (v == null) continue;
+    let text = '';
+    if (typeof v === 'string') text = v;
+    else if (Array.isArray(v)) text = v.map((x) => (x && typeof x === 'object' ? x.v || '' : String(x))).filter(Boolean).join('、');
+    else text = String(v);
+    const clean = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
+    if (clean) return clean;
+  }
+  return null;
+}
+
 function normalizeItems(items) {
   return (items || []).map((s) => ({
     bgmId: s.id,
@@ -104,6 +121,7 @@ function normalizeDetail(s) {
     rank: s.rating && typeof s.rating === 'object' ? s.rating.rank : null,
     imageUrl: itemImage(s),
     summary: s.summary || null,
+    studio: studioFromInfobox(s.infobox),
     tags: Array.isArray(s.tags) ? s.tags.map((t) => (t && t.name) || '').filter(Boolean).join('、') : null,
   };
 }

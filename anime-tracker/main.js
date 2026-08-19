@@ -156,6 +156,16 @@ function registerIpc() {
 
   ipcMain.handle('excel:importApply', handle((items) => store.addMany(items)));
 
+  ipcMain.handle('data:exportHtmlReport', handle(async (content, defaultName) => {
+    const r = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName || `番剧记录-报告-${new Date().toISOString().slice(0, 10)}.html`,
+      filters: [{ name: 'HTML 报告', extensions: ['html'] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    fs.writeFileSync(r.filePath, String(content || ''), 'utf8');
+    return r.filePath;
+  }));
+
   ipcMain.handle('data:exportChart', handle(async (dataUrl) => {
     const r = await dialog.showSaveDialog(mainWindow, {
       defaultPath: `番剧记录-统计-${new Date().toISOString().slice(0, 10)}.png`,

@@ -283,7 +283,20 @@ function statsFor(list) {
   };
 }
 
-function statusBreakdown() {
+const CHART_COLORS = ['#f89164', '#7ee2a8', '#8ab4f8', '#f7c784', '#c9a9e8', '#f08a8a', '#6ec8d8', '#b3d47a', '#e0a45a', '#9aa0a6'];
+
+function colorize(items) {
+  return (items || []).map((it, i) => ({ ...it, color: CHART_COLORS[i % CHART_COLORS.length] }));
+}
+
+function topItemsWithOther(items, topN) {
+  const top = (items || []).slice(0, topN);
+  const rest = (items || []).slice(topN).reduce((s, x) => s + x.value, 0);
+  if (rest > 0) top.push({ label: '其他', value: rest, color: '#6f6f7e' });
+  return top;
+}
+
+function statusBreakdown(list = state.anime) {
   const defs = [
     { key: 'watching', label: '在看', color: '#7ee2a8' },
     { key: 'completed', label: '看完', color: '#8ab4f8' },
@@ -292,13 +305,13 @@ function statusBreakdown() {
     { key: 'plan', label: '想看', color: '#f89164' },
   ];
   return defs
-    .map((d) => ({ label: d.label, value: state.anime.filter((a) => a.status === d.key).length, color: d.color }))
+    .map((d) => ({ label: d.label, value: list.filter((a) => a.status === d.key).length, color: d.color }))
     .filter((x) => x.value > 0);
 }
 
-function monthlyWatchData() {
+function monthlyWatchData(list = state.anime) {
   const map = {};
-  for (const a of state.anime) {
+  for (const a of list) {
     for (const e of (a.watchLog || [])) {
       const m = String(e.at).slice(0, 7);
       if (m) map[m] = (map[m] || 0) + 1;
@@ -307,12 +320,34 @@ function monthlyWatchData() {
   return Object.keys(map).sort().map((k) => ({ label: k.slice(2) + '月', value: map[k] }));
 }
 
-function quarterCountData() {
+function quarterCountData(list = state.anime) {
   const map = {};
-  for (const a of state.anime) {
+  for (const a of list) {
     map[a.season] = (map[a.season] || 0) + 1;
   }
   return Object.keys(map).sort().map((k) => ({ label: k.slice(2) + '月', value: map[k] }));
+}
+
+function studioBreakdown(list = state.anime) {
+  const map = new Map();
+  for (const a of list) {
+    const s = String(a.studio || '').trim() || '未标注';
+    map.set(s, (map.get(s) || 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function tagBreakdown(list = state.anime) {
+  const map = new Map();
+  for (const a of list) {
+    const tags = String(a.tags || '').split(/[、，,;；\/]/).map((x) => x.trim()).filter(Boolean);
+    for (const tag of tags) map.set(tag, (map.get(tag) || 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
 }
 
 function drawBarChart(canvas, items, opts = {}) {
@@ -358,6 +393,71 @@ function drawBarChart(canvas, items, opts = {}) {
   ctx.textAlign = 'left';
 }
 
+function drawLineChart(canvas, items, opts = {}) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const sc = W / 400;
+  ctx.clearRect(0, 0, W, H);
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const padL = 30 * sc, padR = 10 * sc, padT = 10 * sc, padB = 24 * sc;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillStyle = '#9a9aab';
+  ctx.font = `${10 * sc}px "Microsoft YaHei UI"`;
+  ctx.textAlign = 'right';
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + ch - (ch * g) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillText(String(Math.round((max * g) / 4)), padL - 4 * sc, y + 3 * sc);
+  }
+  const n = items.length;
+  if (!n) { ctx.textAlign = 'left'; return; }
+  const px = (i) => (n === 1 ? padL + cw / 2 : padL + (cw * i) / (n - 1));
+  const py = (v) => padT + ch - (ch * v) / max;
+  const color = opts.color || '#f89164';
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + ch);
+  grad.addColorStop(0, 'rgba(248,145,100,0.30)');
+  grad.addColorStop(1, 'rgba(248,145,100,0.02)');
+  ctx.beginPath();
+  items.forEach((it, i) => {
+    const x = px(i), y = py(it.value);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(px(n - 1), padT + ch);
+  ctx.lineTo(px(0), padT + ch);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.beginPath();
+  items.forEach((it, i) => {
+    const x = px(i), y = py(it.value);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * sc;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  items.forEach((it, i) => {
+    const x = px(i), y = py(it.value);
+    ctx.beginPath();
+    ctx.arc(x, y, 3 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#14141a';
+    ctx.lineWidth = 1.2 * sc;
+    ctx.stroke();
+  });
+  ctx.fillStyle = '#9a9aab';
+  ctx.textAlign = 'center';
+  items.forEach((it, i) => { ctx.fillText(String(it.label), px(i), H - 5 * sc); });
+  ctx.textAlign = 'left';
+}
+
 function drawDonut(canvas, items) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
@@ -388,15 +488,19 @@ function drawDonut(canvas, items) {
   ctx.textAlign = 'left';
 }
 
-function drawStatsCharts(statusItems, monthItems, qCounts, qEps) {
+function drawStatsCharts(statusItems, monthItems, qCounts, qEps, studioItems, tagItems) {
   const cs = $('#chart-status');
   if (cs) drawDonut(cs, statusItems);
   const cm = $('#chart-month');
-  if (cm) drawBarChart(cm, monthItems);
+  if (cm) drawLineChart(cm, monthItems);
   const cq = $('#chart-qcount');
   if (cq) drawBarChart(cq, qCounts, { color0: '#7db4ff', color1: '#3d8bff' });
   const ce = $('#chart-qeps');
   if (ce) drawBarChart(ce, qEps, { color0: '#7ee2a8', color1: '#2f9e63' });
+  const cs2 = $('#chart-studio');
+  if (cs2) drawBarChart(cs2, studioItems.slice(0, 10), { color0: '#c9a9e8', color1: '#9a6fd8' });
+  const ct = $('#chart-tags');
+  if (ct) drawDonut(ct, colorize(topItemsWithOther(tagItems, 8)));
 }
 
 function renderStats(c) {
@@ -411,6 +515,8 @@ function renderStats(c) {
   const qEps = Object.keys(bySeason).sort().map((k) => ({ label: k.slice(2) + '月', value: statsFor(bySeason[k]).eps }));
   const statusItems = statusBreakdown();
   const monthItems = monthlyWatchData();
+  const studioItems = studioBreakdown();
+  const tagItems = tagBreakdown();
   const top = all.filter((a) => a.rating != null).sort((a, b) => b.rating - a.rating).slice(0, 5);
   const recent = all.filter((a) => lastWatchedAt(a) > 0).sort((a, b) => lastWatchedAt(b) - lastWatchedAt(a)).slice(0, 5);
   const avgText = s.avg != null ? s.avg.toFixed(1) : '—';
@@ -426,6 +532,7 @@ function renderStats(c) {
       <h1>统计</h1>
       <span class="sub">共 ${all.length} 部追番记录</span>
       <div class="spacer"></div>
+      <button class="btn" data-action="export-html-report">📄 导出 HTML 报告</button>
       <button class="btn btn-primary" data-action="export-stats">📊 导出统计图</button>
     </div>
     <div class="stats-grid">
@@ -440,12 +547,14 @@ function renderStats(c) {
       <div class="stat-card"><div class="num">${avgText}</div><div class="label">平均评分（${s.ratedCount} 部已评）</div></div>
       <div class="stat-card"><div class="num" style="font-size:19px">${esc(spanText)}</div><div class="label">追番跨度</div></div>
     </div>
-    <div class="stats-section-title">图表</div>
+    <div class="stats-section-title">图表分析</div>
     <div class="charts-grid">
-      <div class="chart-card"><h3>状态分布</h3><canvas id="chart-status" width="380" height="240"></canvas></div>
-      <div class="chart-card"><h3>每月观看次数</h3><canvas id="chart-month" width="460" height="240"></canvas></div>
-      <div class="chart-card"><h3>各季度番剧数</h3><canvas id="chart-qcount" width="460" height="240"></canvas></div>
-      <div class="chart-card"><h3>各季度累计集数</h3><canvas id="chart-qeps" width="460" height="240"></canvas></div>
+      <div class="chart-card"><h3>状态分布</h3><canvas id="chart-status" width="360" height="220"></canvas></div>
+      <div class="chart-card"><h3>每月观看集数</h3><canvas id="chart-month" width="520" height="220"></canvas></div>
+      <div class="chart-card"><h3>各季度番剧数</h3><canvas id="chart-qcount" width="520" height="220"></canvas></div>
+      <div class="chart-card"><h3>各季度累计集数</h3><canvas id="chart-qeps" width="520" height="220"></canvas></div>
+      <div class="chart-card"><h3>制作公司 Top 10</h3><canvas id="chart-studio" width="520" height="220"></canvas></div>
+      <div class="chart-card"><h3>题材标签占比</h3><canvas id="chart-tags" width="360" height="220"></canvas></div>
     </div>
     ${recent.length ? `
       <div class="stats-section-title">最近观看</div>
@@ -468,7 +577,7 @@ function renderStats(c) {
           </div>`).join('')}
       </div>` : ''}
   `;
-  drawStatsCharts(statusItems, monthItems, qCounts, qEps);
+  drawStatsCharts(statusItems, monthItems, qCounts, qEps, studioItems, tagItems);
 }
 
 function buildStatsChartDataUrl() {
@@ -552,6 +661,216 @@ function buildStatsChartDataUrl() {
   ctx.textAlign = 'center';
   ctx.fillText('番剧记录 Anime Tracker', W / 2, y);
   return canvas.toDataURL('image/png');
+}
+
+
+/* ---------- HTML 报告 ---------- */
+function svgBars(items, opts = {}) {
+  const W = 560, H = 240, padL = 44, padR = 14, padT = 16, padB = 36;
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const color = opts.color || '#f89164';
+  const n = items.length;
+  const slot = cw / Math.max(1, n);
+  const bw = Math.min(30, slot * 0.55);
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="'Microsoft YaHei UI','Segoe UI',sans-serif">`;
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + ch - (ch * g) / 4;
+    s += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,0.08)"/>`;
+    s += `<text x="${padL - 6}" y="${y + 4}" fill="#9a9aab" font-size="11" text-anchor="end">${Math.round((max * g) / 4)}</text>`;
+  }
+  items.forEach((it, i) => {
+    const h = Math.max(2, (ch * it.value) / max);
+    const x = padL + slot * i + (slot - bw) / 2;
+    const y = padT + ch - h;
+    s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"/>`;
+    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 10}" fill="#9a9aab" font-size="11" text-anchor="middle">${esc(it.label)}</text>`;
+  });
+  s += '</svg>';
+  return s;
+}
+
+function svgLine(items, opts = {}) {
+  const W = 560, H = 240, padL = 44, padR = 16, padT = 16, padB = 36;
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const n = items.length;
+  const px = (i) => (n === 1 ? padL + cw / 2 : padL + (cw * i) / (n - 1));
+  const py = (v) => padT + ch - (ch * v) / max;
+  const color = opts.color || '#f89164';
+  const pts = items.map((it, i) => `${px(i).toFixed(1)},${py(it.value).toFixed(1)}`).join(' ');
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="'Microsoft YaHei UI','Segoe UI',sans-serif">`;
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + ch - (ch * g) / 4;
+    s += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,0.08)"/>`;
+    s += `<text x="${padL - 6}" y="${y + 4}" fill="#9a9aab" font-size="11" text-anchor="end">${Math.round((max * g) / 4)}</text>`;
+  }
+  if (n > 1) {
+    s += `<polygon points="${padL},${padT + ch} ${pts} ${px(n - 1).toFixed(1)},${padT + ch}" fill="rgba(248,145,100,0.16)"/>`;
+    s += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  items.forEach((it, i) => {
+    const x = px(i), y = py(it.value);
+    s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${color}" stroke="#14141a" stroke-width="1.5"/>`;
+    s += `<text x="${x.toFixed(1)}" y="${H - 10}" fill="#9a9aab" font-size="11" text-anchor="middle">${esc(it.label)}</text>`;
+  });
+  s += '</svg>';
+  return s;
+}
+
+function svgDonut(items) {
+  const W = 380, H = 240, cx = 118, cy = H / 2, r = 74, sw = 28;
+  const total = items.reduce((s, i) => s + i.value, 0) || 1;
+  const circ = 2 * Math.PI * r;
+  let acc = 0;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="'Microsoft YaHei UI','Segoe UI',sans-serif">`;
+  if (!items.length) {
+    s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2a2a33" stroke-width="${sw}"/>`;
+    s += `<text x="${cx}" y="${cy + 8}" fill="#9a9aab" font-size="26" font-weight="bold" text-anchor="middle">0</text>`;
+    s += '</svg>';
+    return s;
+  }
+  items.forEach((it) => {
+    const frac = it.value / total;
+    const dash = frac * circ;
+    const off = -acc * circ;
+    s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(1)} ${(circ - dash).toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    acc += frac;
+  });
+  s += `<text x="${cx}" y="${cy + 8}" fill="#e9e9f2" font-size="26" font-weight="bold" text-anchor="middle">${total}</text>`;
+  let ly = 22;
+  for (const it of items.slice(0, 8)) {
+    s += `<rect x="${W - 128}" y="${ly - 9}" width="11" height="11" rx="2.5" fill="${it.color}"/>`;
+    s += `<text x="${W - 110}" y="${ly}" fill="#c9c9d4" font-size="11.5">${esc(it.label)} · ${it.value}</text>`;
+    ly += 19;
+  }
+  s += '</svg>';
+  return s;
+}
+
+function reportScopeTitle(scopeKey) {
+  if (scopeKey === 'all') return '全部追番报告';
+  if (/^\d{4}$/.test(scopeKey)) return `${scopeKey} 年度报告`;
+  return `${seasonLabel(scopeKey)} 季度报告`;
+}
+
+function buildHtmlReport(scopeKey) {
+  const list = scopeKey === 'all'
+    ? state.anime
+    : state.anime.filter((a) => (/^\d{4}$/.test(scopeKey) ? (a.season || '').slice(0, 4) === scopeKey : a.season === scopeKey));
+  const s = statsFor(list);
+  const bySeason = {};
+  for (const a of list) { (bySeason[a.season] = bySeason[a.season] || []).push(a); }
+  const qKeys = Object.keys(bySeason).sort();
+  const qCounts = quarterCountData(list);
+  const qEps = qKeys.map((k) => ({ label: k.slice(2) + '月', value: statsFor(bySeason[k]).eps }));
+  const statusItems = statusBreakdown(list);
+  const monthItems = monthlyWatchData(list);
+  const studioItems = studioBreakdown(list).slice(0, 10);
+  const tagItems = colorize(topItemsWithOther(tagBreakdown(list), 8));
+  const top = list.filter((a) => a.rating != null).sort((a, b) => b.rating - a.rating).slice(0, 10);
+  const recent = list.filter((a) => lastWatchedAt(a) > 0).sort((a, b) => lastWatchedAt(b) - lastWatchedAt(a)).slice(0, 10);
+  const title = reportScopeTitle(scopeKey);
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const statCards = [
+    ['追番总数', String(s.total), '#f89164'],
+    ['在看', String(s.watching), '#7ee2a8'],
+    ['看完', String(s.completed), '#8ab4f8'],
+    ['累计集数', String(s.eps), '#f7c784'],
+    ['完成率', s.rate + '%', '#c9a9e8'],
+    ['平均评分', s.avg != null ? s.avg.toFixed(1) : '—', '#6ec8d8'],
+  ].map(([label, value, color]) =>
+    `<div class="card"><div class="num" style="color:${color}">${value}</div><div class="lbl">${label}</div></div>`).join('');
+  const listHtml = (items, render) => items.length ? items.map(render).join('') : '<div class="empty-line">暂无数据</div>';
+  const topHtml = listHtml(top, (a, i) =>
+    `<div class="row"><span class="rank">${i + 1}</span><span class="t">${esc(a.title)}<em>${esc(seasonLabel(a.season))}</em></span><span class="r">${a.rating} 分</span></div>`);
+  const recentHtml = listHtml(recent, (a, i) =>
+    `<div class="row"><span class="rank">${i + 1}</span><span class="t">${esc(a.title)}<em>${esc(formatWatchTime(new Date(lastWatchedAt(a)).toISOString()))}</em></span><span class="r">第 ${a.episode || 0} 集</span></div>`);
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · 番剧记录</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #101016; color: #e9e9f2; font-family: "Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; padding: 36px 24px 48px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .head { text-align: center; margin-bottom: 28px; }
+  .head h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
+  .head p { color: #9a9aab; font-size: 13.5px; margin-top: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 18px; text-align: center; }
+  .card .num { font-size: 30px; font-weight: 800; }
+  .card .lbl { color: #9a9aab; font-size: 12.5px; margin-top: 5px; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .chart { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 16px; }
+  .chart h3 { color: #9a9aab; font-size: 14px; margin-bottom: 12px; font-weight: 600; }
+  .chart svg { width: 100%; height: auto; display: block; }
+  .lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+  .list { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 16px; }
+  .list h3 { color: #9a9aab; font-size: 14px; margin-bottom: 12px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13.5px; }
+  .row:last-child { border-bottom: none; }
+  .row .rank { color: #f7b9a0; font-weight: 700; width: 20px; }
+  .row .t { flex: 1; }
+  .row .t em { display: block; color: #6f6f7e; font-size: 11.5px; font-style: normal; }
+  .row .r { color: #e87a52; font-weight: 600; }
+  .empty-line { color: #6f6f7e; font-size: 13px; padding: 10px 4px; }
+  .foot { text-align: center; color: #6f6f7e; font-size: 12px; margin-top: 30px; }
+</style></head>
+<body><div class="wrap">
+  <div class="head"><h1>${esc(title)}</h1><p>番剧记录 Anime Tracker · 生成于 ${dateStr} · 共 ${list.length} 部 · 累计观看 ${s.eps} 集</p></div>
+  <div class="grid">${statCards}</div>
+  <div class="charts">
+    <div class="chart"><h3>状态分布</h3>${svgDonut(statusItems)}</div>
+    <div class="chart"><h3>每月观看集数</h3>${svgLine(monthItems)}</div>
+    <div class="chart"><h3>各季度番剧数</h3>${svgBars(qCounts, { color: '#8ab4f8' })}</div>
+    <div class="chart"><h3>各季度累计集数</h3>${svgBars(qEps, { color: '#7ee2a8' })}</div>
+    <div class="chart"><h3>制作公司 Top 10</h3>${svgBars(studioItems, { color: '#c9a9e8' })}</div>
+    <div class="chart"><h3>题材标签占比</h3>${svgDonut(tagItems)}</div>
+  </div>
+  <div class="lists">
+    <div class="list"><h3>高分榜单</h3>${topHtml}</div>
+    <div class="list"><h3>最近观看</h3>${recentHtml}</div>
+  </div>
+  <div class="foot">番剧记录 Anime Tracker</div>
+</div></body></html>`;
+  return { html, name: `番剧记录-${title}-${dateStr}.html` };
+}
+
+function openReportModal() {
+  const years = [...new Set(state.anime.map((a) => (a.season || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const seasons = [...new Set(state.anime.map((a) => a.season).filter(Boolean))].sort().reverse();
+  const opts = [`<option value="all">全部记录（${state.anime.length} 部）</option>`];
+  for (const y of years) opts.push(`<option value="${y}">${y} 年度</option>`);
+  for (const k of seasons) opts.push(`<option value="${k}">${seasonLabel(k)}</option>`);
+  renderModal(`
+    <div class="modal-head"><h2>导出 HTML 报告</h2><button class="modal-close" data-action="close">✕</button></div>
+    <div class="modal-body">
+      <div class="hint">生成一份静态 HTML 报告（内置图表、无需联网），可直接在浏览器打开查看，或截图分享你的年度 / 季度看番总结。</div>
+      <div class="field"><label>统计范围</label><select id="report-scope" style="width:100%">${opts.join('')}</select></div>
+      <div class="form-actions">
+        <span style="flex:1"></span>
+        <button class="btn" data-action="close">取消</button>
+        <button class="btn btn-primary" data-action="report-generate">生成并保存…</button>
+      </div>
+    </div>`);
+}
+
+async function doExportHtmlReport() {
+  const sel = $('#report-scope');
+  const scopeKey = sel ? sel.value : 'all';
+  let built;
+  try {
+    built = buildHtmlReport(scopeKey);
+  } catch (e) {
+    toast('生成 HTML 报告失败：' + (e && e.message || e), 'error');
+    return;
+  }
+  try {
+    const p = await call(api.exportHtmlReport(built.html, built.name));
+    if (!p) return;
+    toast(`HTML 报告已导出：${p}`, 'success');
+    closeModal();
+  } catch (e) { /* call 已提示 */ }
 }
 
 async function doExportStatsChart() {
@@ -759,6 +1078,8 @@ function formHTML() {
     <div class="form-field"><label>每周更新日</label><select id="f-day">${dayOpts}</select></div>
     <div class="form-field"><label>我的评分（1-10）</label><select id="f-rating">${ratingOpts}</select></div>
     <div class="form-field full"><label>短评（可选）</label><textarea id="f-comment" placeholder="一句话记录观感…"></textarea></div>
+    <div class="form-field"><label>制作公司（可选）</label><input id="f-studio" type="text" placeholder="如 Studio Bind" /></div>
+    <div class="form-field"><label>题材标签（可选，顿号/逗号分隔）</label><input id="f-tags" type="text" placeholder="如 异世界、奇幻、冒险" /></div>
     <div class="form-field full"><label>关联下载文件夹（可选，多个用分号隔开）</label><input id="f-folders" type="text" placeholder="如 D:\\ANIME\\花织" /></div>
     ${isEdit ? `
     <div class="form-field full">
@@ -864,6 +1185,8 @@ function fillForm(v) {
   $('#f-day').value = v.updateDay != null ? String(v.updateDay) : '';
   $('#f-rating').value = v.rating != null ? String(v.rating) : '';
   $('#f-comment').value = v.comment || '';
+  if ($('#f-studio')) $('#f-studio').value = v.studio || '';
+  if ($('#f-tags')) $('#f-tags').value = v.tags || '';
   $('#f-folders').value = Array.isArray(v.folders) ? v.folders.join('; ') : '';
   renderWatchLog(v.watchLog);
 }
@@ -990,6 +1313,8 @@ async function doBgmDetail(id) {
       bgmUrl: null,
       coverUrl: d.imageUrl,
       summary: d.summary,
+      studio: d.studio || '',
+      tags: d.tags || '',
     };
     if (d.date) {
       const dm = String(d.date).match(/^(\d{4})-(\d{1,2})/);
@@ -1038,6 +1363,8 @@ async function submitForm() {
     updateDay: $('#f-day').value === '' ? null : Number($('#f-day').value),
     rating: $('#f-rating').value === '' ? null : Number($('#f-rating').value),
     comment: $('#f-comment').value.trim(),
+    studio: $('#f-studio').value.trim(),
+    tags: $('#f-tags').value.trim(),
     folders: $('#f-folders').value.split(/[;；,，]/).map((s) => s.trim()).filter(Boolean),
     watchLog: collectWatchLog(),
     ...modal.selected,
@@ -1326,6 +1653,8 @@ function handleAction(el, e) {
     case 'settings-save': saveSettings(); break;
     case 'backup-now': doBackupNow(); break;
     case 'export-stats': doExportStatsChart(); break;
+    case 'export-html-report': openReportModal(); break;
+    case 'report-generate': doExportHtmlReport(); break;
     default: break;
   }
 }

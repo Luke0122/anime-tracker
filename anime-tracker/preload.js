@@ -21,6 +21,7 @@ const api = {
   exportJson: () => ipcRenderer.invoke('data:exportJson'),
   backupNow: () => ipcRenderer.invoke('backup:now'),
   exportChart: (dataUrl) => ipcRenderer.invoke('data:exportChart', dataUrl),
+  exportHtmlReport: (content, defaultName) => ipcRenderer.invoke('data:exportHtmlReport', content, defaultName),
   importJson: () => ipcRenderer.invoke('data:importJson'),
   importJsonApply: (filePath) => ipcRenderer.invoke('data:importJsonApply', filePath),
 
