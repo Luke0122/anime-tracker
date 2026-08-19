@@ -98,7 +98,7 @@ function detectNewSeasons(seasons) {
   if (!fresh.length) return;
   for (const k of fresh) {
     const s = seasons.find((x) => x.key === k);
-    toast(`\u68c0\u6d4b\u5230\u65b0\u7684\u5b63\u5ea6\u6570\u636e\uff1a${s ? s.label : seasonLabel(k)}\uff0c\u5df2\u81ea\u52a8\u5bfc\u5165\u300c\u5f53\u5b63\u65b0\u756a\u300d`, 'success');
+    toast(`检测到新的季度数据：${s ? s.label : seasonLabel(k)}（可在「添加番剧 → 当季新番」选用）`, 'success');
   }
   saveKnownSeasons(keys);
 }
@@ -223,9 +223,8 @@ function renderSeason(c, key) {
       <h1>${esc(s ? s.label : key)}</h1>
       <span class="sub">${list.length} 部 · ${watching} 在看</span>
       <div class="spacer"></div>
-      <button class="btn btn-primary" data-action="add" data-season="${key}">＋ 添加番剧</button>
     </div>
-    ${list.length ? `<div class="cards">${list.map(cardHTML).join('')}</div>` : emptyHTML('这个季度还没有记录，添加一部番剧吧')}
+    ${list.length ? `<div class="cards">${list.map(cardHTML).join('')}</div>` : emptyHTML('这个季度还没有记录，添加一部番剧吧', false)}
   `;
   attachImgFallback(c);
 }
@@ -239,13 +238,12 @@ function renderAll(c) {
         <h1>全部番剧</h1>
         <span class="sub">共 ${list.length} 部 · 按最近观看排序</span>
         <div class="spacer"></div>
-        <button class="btn btn-primary" data-action="add">＋ 添加番剧</button>
       </div>
       ${sorted.length ? `
       <div class="quarter-section">
         <div class="quarter-title"><span class="dot"></span>最近观看<span class="n">${sorted.length} 部</span></div>
         <div class="cards">${sorted.map(cardHTML).join('')}</div>
-      </div>` : emptyHTML('还没有任何记录，添加一部番剧吧')}
+      </div>` : emptyHTML('还没有任何记录，添加一部番剧吧', false)}
     `;
     attachImgFallback(c);
     return;
@@ -261,13 +259,12 @@ function renderAll(c) {
       <h1>全部番剧</h1>
       <span class="sub">共 ${list.length} 部</span>
       <div class="spacer"></div>
-      <button class="btn btn-primary" data-action="add">＋ 添加番剧</button>
     </div>
     ${keys.length ? keys.map((k) => `
       <div class="quarter-section">
         <div class="quarter-title"><span class="dot"></span>${esc(seasonLabel(k))}<span class="n">${bySeason[k].length} 部</span></div>
         <div class="cards">${bySeason[k].map(cardHTML).join('')}</div>
-      </div>`).join('') : emptyHTML('还没有任何记录，添加一部番剧吧')}
+      </div>`).join('') : emptyHTML('还没有任何记录，添加一部番剧吧', false)}
   `;
   attachImgFallback(c);
 }
@@ -580,7 +577,7 @@ function renderSettings(c) {
       <div class="field">
         <label>动画信息数据目录（读取当季新番）</label>
         <input id="set-base" type="text" value="${esc(state.settings.animeInfoBaseDir || '')}" />
-        <div class="hint" style="margin-top:6px">默认：D:\\ANIME\\日本TV动画信息。应用会读取季度文件夹里的 bangumi JSON；缺失时解析其中的「新番信息.docx」或内置 yuc.wiki 目录。</div>
+        <div class="hint" style="margin-top:6px">默认：D:\\ANIME\\日本TV动画信息。当季新番只来自 yuc.wiki（在线抓取，断网时用内置目录）；添加番剧时可用「搜 Bangumi」补全信息。</div>
       </div>
       <div class="field">
         <label>定期自动备份</label>
@@ -893,10 +890,7 @@ async function loadSeasonShows(key) {
       hintEl.textContent = `全部季度 · 共 ${modal.seasonItems.length} 部（本地数据优先，其余来自内置 yuc.wiki 目录）`;
     } else {
       const srcMap = {
-        'bangumi-json': 'Bangumi JSON',
-        'season-json': '季度 JSON',
-        'docx': '新番信息 docx',
-        'yuc-json': 'yuc JSON',
+        'yuc-live': 'yuc.wiki 实时',
         'bundled-catalog': '内置 yuc.wiki 目录',
       };
       hintEl.textContent = `数据来源：${srcMap[modal.seasonSource] || modal.seasonSource} · 共 ${modal.seasonItems.length} 部`;
@@ -917,6 +911,8 @@ function renderSeasonList() {
     return;
   }
   listEl.innerHTML = items.map((item) => {
+    const key = item.season || (isAll ? null : modal.seasonKey);
+    const existing = key ? state.anime.find((a) => a.title === item.title && a.season === key) : null;
     const meta = [
       isAll ? seasonLabel(item.season || modal.seasonKey) : null,
       item.weekday, item.time,
@@ -927,8 +923,13 @@ function renderSeasonList() {
     const cover = item.coverUrl
       ? `<img class="cover" src="${esc(item.coverUrl)}" alt="" />`
       : '<div class="cover" style="display:flex;align-items:center;justify-content:center">🎬</div>';
+    const addedBadge = existing
+      ? `<span class="badge st-added">已添加 · ${esc(STATUS_META[existing.status] ? STATUS_META[existing.status].label : '')}</span>`
+      : '';
+    const pickCls = existing ? 'pick-item added' : 'pick-item';
+    const pickAttr = existing ? '' : ' data-action="season-pick"';
     return `
-    <div class="pick-item" data-action="season-pick"
+    <div class="${pickCls}"${pickAttr}
       data-title="${esc(item.title)}"
       data-season="${esc(item.season || modal.seasonKey)}"
       data-bgm-id="${esc(item.bgmId || '')}"
@@ -940,6 +941,7 @@ function renderSeasonList() {
       ${cover}
       <div class="t">${esc(item.title)}</div>
       <div class="meta">${esc(meta)}</div>
+      ${addedBadge}
     </div>`;
   }).join('');
   attachImgFallback(listEl);
@@ -954,15 +956,22 @@ async function doBgmSearch() {
     const items = await call(api.searchBangumi(q));
     if (!items.length) { listEl.innerHTML = '<div class="pick-empty">没有找到结果，试试更短的关键词，或切到「手动填写」</div>'; return; }
     listEl.innerHTML = items.map((it) => {
+      const existing = state.anime.find((a) => a.title === it.title);
       const meta = [it.date, it.rating != null ? `评分 ${it.rating}` : '', it.name && it.name !== it.title ? it.name : ''].filter(Boolean).join(' · ');
       const cover = it.imageUrl
         ? `<img class="cover" src="${esc(it.imageUrl)}" alt="" />`
         : '<div class="cover" style="display:flex;align-items:center;justify-content:center">🎬</div>';
+      const addedBadge = existing
+        ? `<span class="badge st-added">已添加 · ${esc(STATUS_META[existing.status] ? STATUS_META[existing.status].label : '')}</span>`
+        : '';
+      const pickCls = existing ? 'pick-item added' : 'pick-item';
+      const pickAttr = existing ? '' : ' data-action="bgm-pick"';
       return `
-      <div class="pick-item" data-action="bgm-pick" data-id="${it.bgmId}">
+      <div class="${pickCls}"${pickAttr} data-id="${it.bgmId}">
         ${cover}
         <div class="t">${esc(it.title)}</div>
         <div class="meta">${esc(meta)}</div>
+        ${addedBadge}
       </div>`;
     }).join('');
     attachImgFallback(listEl);

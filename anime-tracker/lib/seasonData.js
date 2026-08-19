@@ -1,8 +1,7 @@
-﻿'use strict';
+'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { pathToFileURL } = require('url');
 const yucLive = require('./yucLive');
 const { WEEKDAY_TO_NUM } = require('./labels');
 
@@ -50,32 +49,6 @@ function discoverSeasons(baseDir) {
   return out;
 }
 
-function seasonJsonPath(baseDir, seasonKey) {
-  return path.join(baseDir, 'scripts', '_runtime', 'data', `bangumi_${seasonKey.replace('-', '')}.json`);
-}
-
-function yucJsonPath(baseDir, seasonKey) {
-  return path.join(baseDir, 'scripts', '_runtime', 'data', `yuc_${seasonKey.replace('-', '')}.json`);
-}
-
-function findDocxInFolder(folder) {
-  if (!folder || !fs.existsSync(folder)) return null;
-  let files = [];
-  try { files = fs.readdirSync(folder); } catch (_) { return null; }
-  files = files.filter((f) => /新番信息.*\.docx$/i.test(f)).sort();
-  if (!files.length) return null;
-  return path.join(folder, files[files.length - 1]);
-}
-
-function findSeasonJsonInFolder(folder) {
-  if (!folder || !fs.existsSync(folder)) return null;
-  let files = [];
-  try { files = fs.readdirSync(folder); } catch (_) { return null; }
-  files = files.filter((f) => /新番信息.*\.json$/i.test(f)).sort();
-  if (!files.length) return null;
-  return path.join(folder, files[files.length - 1]);
-}
-
 // 内置的 yuc.wiki 历史季度目录（2019-10 至 2026-07，随应用打包）
 const BUNDLED_CATALOG = path.join(__dirname, '..', 'data', 'yuc-catalog.json');
 let bundledCatalogCache = null;
@@ -95,73 +68,38 @@ function weekdayNum(wd) {
   return WEEKDAY_TO_NUM[String(wd).trim()] ?? null;
 }
 
-function normalizeBangumiItem(x) {
-  if (!x) return null;
-  const wd = x.weekday || null;
-  return {
-    title: x.title || x.name_cn || x.name || '',
-    weekday: wd,
-    weekdayNum: weekdayNum(wd),
-    time: x.time || null,
-    eps: typeof x.eps === 'number' ? x.eps : x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
-    studio: x.studio || null,
-    rating: typeof x.rating === 'number' ? x.rating : x.rating != null ? parseFloat(x.rating) : null,
-    original: x.original === true || x.original === '原创',
-    bgmId: x.bgm_id || null,
-    bgmUrl: x.bgm_url || null,
-    coverUrl: x.image_url || null,
-    name: x.name || null,
-    nameCn: x.name_cn || null,
-    date: x.date || null,
-    source: x.source || null,
-    director: x.director || null,
-    script: x.script || null,
-    cast: x.cast || null,
-    tags: x.tags || null,
-    summary: x.summary || null,
-  };
+// 与 yucLive.clean 一致：还原实体、去掉 <br>、压缩空白，保证内置目录标题与在线抓取一致
+function cleanTitle(s) {
+  return String(s || '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/\s+/g, '');
 }
 
+function catalogItems(seasonData) {
+  if (!seasonData || !Array.isArray(seasonData.shows)) return [];
+  return seasonData.shows.map((x) => ({
+    title: cleanTitle(x.title),
+    weekday: x.weekday || null,
+    weekdayNum: weekdayNum(x.weekday),
+    time: x.time || null,
+    eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
+    region: x.region || null,
+    coverUrl: x.cover
+      ? `cover://local/${path.basename(x.cover)}`
+      : (x.coverUrl || null),
+  })).filter((x) => x.title);
+}
+
+// 当季新番只来自 yuc.wiki：在线抓取优先，失败时回退内置 yuc.wiki 目录（不读 bangumi JSON / Word 信息）
 function loadSeasonList(baseDir, seasonKey) {
   if (!SEASON_RE.test(String(seasonKey || ''))) throw new Error('无效季度: ' + seasonKey);
   const errors = [];
-
-  const jp = seasonJsonPath(baseDir, seasonKey);
-  if (fs.existsSync(jp)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(jp, 'utf8'));
-      const items = (data.items || []).map(normalizeBangumiItem).filter((x) => x && x.title);
-      if (items.length) return { source: 'bangumi-json', items, meta: { fetchedAt: data.fetched_at || null } };
-    } catch (e) { errors.push('bangumi JSON 解析失败: ' + e.message); }
-  }
-
-  const season = discoverSeasons(baseDir).find((s) => s.key === seasonKey);
-  const seasonJson = season ? findSeasonJsonInFolder(season.folder) : null;
-  if (seasonJson) {
-    try {
-      const data = JSON.parse(fs.readFileSync(seasonJson, 'utf8'));
-      const items = (data.items || []).map(normalizeBangumiItem).filter((x) => x && x.title);
-      if (items.length) return { source: 'season-json', items, meta: { json: seasonJson } };
-    } catch (e) { errors.push('\u5b63\u5ea6 JSON \u89e3\u6790\u5931\u8d25: ' + e.message); }
-  }
-  // 内置 yuc.wiki 历史目录兜底（随应用打包，无需联网）
   const catalog = getBundledCatalog();
   const seasonData = catalog.seasons && catalog.seasons[seasonKey.replace('-', '')];
-  if (seasonData && Array.isArray(seasonData.shows) && seasonData.shows.length) {
-    const items = seasonData.shows.map((x) => ({
-      title: x.title || '',
-      weekday: x.weekday || null,
-      weekdayNum: weekdayNum(x.weekday),
-      time: x.time || null,
-      eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
-      region: x.region || null,
-      coverUrl: x.cover
-        ? `cover://local/${path.basename(x.cover)}`
-        : (x.coverUrl || null),
-    })).filter((x) => x.title);
-    if (items.length) return { source: 'bundled-catalog', items, meta: {} };
-  }
-
+  const items = catalogItems(seasonData);
+  if (items.length) return { source: 'bundled-catalog', items, meta: {} };
   return { source: 'none', items: [], errors };
 }
 
@@ -171,32 +109,13 @@ function loadAllShows(baseDir) {
   const seasonKeys = Object.keys(catalog.seasons || {}).sort();
   for (const yyyymm of seasonKeys) {
     const key = `${yyyymm.slice(0, 4)}-${yyyymm.slice(4)}`;
-    let items = null;
-    const jp = seasonJsonPath(baseDir, key);
-    if (fs.existsSync(jp)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(jp, 'utf8'));
-        items = (data.items || []).map(normalizeBangumiItem).filter((x) => x && x.title);
-      } catch (_) { items = null; }
-    }
-    if (!items) {
-      const sd = catalog.seasons[yyyymm];
-      items = ((sd && sd.shows) || []).map((x) => ({
-        title: x.title || '',
-        weekday: x.weekday || null,
-        weekdayNum: weekdayNum(x.weekday),
-        time: x.time || null,
-        eps: x.eps ? parseInt(String(x.eps).replace(/[^0-9]/g, ''), 10) : null,
-        region: x.region || null,
-        coverUrl: x.cover ? `cover://local/${path.basename(x.cover)}` : (x.coverUrl || null),
-      })).filter((x) => x.title);
-    }
+    const items = catalogItems(catalog.seasons[yyyymm]);
     for (const it of items) out.push({ ...it, season: key });
   }
   return { source: 'all', items: out };
 }
 
-// 每季度从 yuc.wiki 实时获取（带缓存）；失败时回退到离线数据（本地 JSON → 内置目录）
+// 每季度从 yuc.wiki 实时获取（带缓存）；失败时回退到内置 yuc.wiki 目录
 async function loadSeasonListLive(baseDir, seasonKey, cacheDir) {
   if (!SEASON_RE.test(String(seasonKey || ''))) throw new Error('无效季度: ' + seasonKey);
   const yyyymm = String(seasonKey).replace('-', '');
@@ -225,5 +144,4 @@ module.exports = {
   loadAllShows,
   currentSeasonKey,
   keyToLabel,
-  findSeasonJsonInFolder,
 };

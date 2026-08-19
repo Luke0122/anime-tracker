@@ -12,6 +12,9 @@ try {
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeAutoBot/1.0';
 
+// 解析器/数据结构版本：解析逻辑变化后递增，使旧缓存自动作废并重新抓取
+const CACHE_VERSION = 2;
+
 function clean(s) {
   return String(s)
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -91,9 +94,16 @@ function parseOld(text) {
   return out;
 }
 
+// yuc.wiki 会把已结束的「首周先行放送」卡片用 HTML 注释 <!-- ... --> 隐藏；
+// 解析前先剔除注释，避免把隐藏卡片当成真实新番（否则会出现同一部番重复两条）。
+function stripComments(text) {
+  return String(text).replace(/<!--[\s\S]*?-->/g, '');
+}
+
 function parsePage(text) {
-  if (text.includes('width="120px"')) return parseCard(text);
-  if (text.includes('title_cn')) return parseOld(text);
+  const html = stripComments(text);
+  if (html.includes('width="120px"')) return parseCard(html);
+  if (html.includes('title_cn')) return parseOld(html);
   return [];
 }
 
@@ -110,7 +120,14 @@ async function fetchText(url, timeoutMs = 20000) {
   }
 }
 
-// 抓取某季度 yuc.wiki 数据；带缓存（默认 24 小时），网络失败时回退过期缓存
+function cacheUsable(cached) {
+  return !!cached
+    && cached.version === CACHE_VERSION
+    && cached.shows && Array.isArray(cached.shows) && cached.shows.length;
+}
+
+// 抓取某季度 yuc.wiki 数据；带缓存（默认 24 小时），网络失败时回退过期缓存。
+// 缓存带 CACHE_VERSION：解析逻辑变更后旧缓存直接作废，重新抓取。
 async function fetchSeason(yyyymm, cacheDir, ttlMs = 24 * 3600 * 1000) {
   if (cacheDir) {
     try { fs.mkdirSync(cacheDir, { recursive: true }); } catch (_) { /* ignore */ }
@@ -120,7 +137,7 @@ async function fetchSeason(yyyymm, cacheDir, ttlMs = 24 * 3600 * 1000) {
     try {
       const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
       const age = Date.now() - new Date(cached.fetchedAt).getTime();
-      if (cached.shows && Array.isArray(cached.shows) && cached.shows.length && age < ttlMs) {
+      if (cacheUsable(cached) && age < ttlMs) {
         return cached.shows;
       }
     } catch (_) { /* 坏缓存忽略 */ }
@@ -131,7 +148,12 @@ async function fetchSeason(yyyymm, cacheDir, ttlMs = 24 * 3600 * 1000) {
     if (shows && shows.length) {
       if (cacheFile) {
         try {
-          fs.writeFileSync(cacheFile, JSON.stringify({ yyyymm, fetchedAt: new Date().toISOString(), shows }, null, 1), 'utf8');
+          fs.writeFileSync(cacheFile, JSON.stringify({
+            yyyymm,
+            version: CACHE_VERSION,
+            fetchedAt: new Date().toISOString(),
+            shows,
+          }, null, 1), 'utf8');
         } catch (_) { /* ignore */ }
       }
       return shows;
@@ -140,10 +162,10 @@ async function fetchSeason(yyyymm, cacheDir, ttlMs = 24 * 3600 * 1000) {
   if (cacheFile && fs.existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      if (cached.shows && Array.isArray(cached.shows) && cached.shows.length) return cached.shows;
+      if (cacheUsable(cached)) return cached.shows;
     } catch (_) { /* ignore */ }
   }
   return [];
 }
 
-module.exports = { parsePage, fetchSeason, fetchText };
+module.exports = { parsePage, fetchSeason, fetchText, CACHE_VERSION };

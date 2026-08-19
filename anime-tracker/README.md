@@ -24,9 +24,9 @@
 
 ## 新番数据来源
 
-- 默认读取 `D:\ANIME\日本TV动画信息` 目录（可在「设置」里修改路径）。
-- 数据优先级：`scripts\_runtime\data\bangumi_YYYYMM.json` → 季度文件夹里的「*新番信息.json」→ 「*新番信息.docx」兜底。
-- 管线每次生成季度新番 docx 时，会同步在季度文件夹写入同名 JSON，应用启动 / 每 10 分钟 / 窗口聚焦时会自动检测并导入新季度（弹出提示，立即可在「添加番剧 → 当季新番」选用）。
+- 「添加番剧 → 当季新番」只从 yuc.wiki 获取：在线实时抓取（带 24 小时缓存），断网时回退到应用内置的 yuc.wiki 季度目录。
+- 「搜 Bangumi」仅用于添加时补全番剧信息（总集数、简介、封面、评分），不作为当季新番列表来源。
+- 不再从 Word（docx）或季度文件夹里的 JSON 读取新番列表。
 
 ## 数据与备份
 
@@ -41,7 +41,7 @@ anime-tracker/
 ├── main.js / preload.js      # Electron 主进程与安全桥
 ├── lib/
 │   ├── store.js              # 数据持久化（原子写入 + 自动备份）
-│   ├── seasonData.js         # 季度数据源（bangumi JSON / docx 兜底）
+│   ├── seasonData.js         # 季度数据源（yuc.wiki 实时 + 内置目录）
 │   ├── docxParser.js         # 解析新番信息 docx
 │   ├── bangumi.js            # Bangumi 搜索 API 客户端
 │   ├── scanner.js            # 下载目录扫描与文件名解析

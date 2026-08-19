@@ -584,3 +584,8 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
   outline: none;
 }
 
+
+/* 添加弹窗：已添加的番剧 */
+.pick-item.added { opacity: 0.62; cursor: default; }
+.pick-item.added:hover { background: transparent; }
+.st-added { background: rgba(196, 167, 231, 0.15); color: #c9a9e8; }
