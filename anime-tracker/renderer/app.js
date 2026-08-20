@@ -241,6 +241,7 @@ function renderAll(c) {
         <h1>全部番剧</h1>
         <span class="sub">共 ${list.length} 部 · 按最近观看排序</span>
         <div class="spacer"></div>
+        <button class="btn" data-action="export-excel">📤 导出 Excel…</button>
       </div>
       ${sorted.length ? `
       <div class="quarter-section">
@@ -262,6 +263,7 @@ function renderAll(c) {
       <h1>全部番剧</h1>
       <span class="sub">共 ${list.length} 部</span>
       <div class="spacer"></div>
+      <button class="btn" data-action="export-excel">📤 导出 Excel…</button>
     </div>
     ${keys.length ? keys.map((k) => `
       <div class="quarter-section">
@@ -936,6 +938,15 @@ function renderSettings(c) {
             <button class="btn" data-action="bangumi-enrich">🔍 补全 Bangumi 信息</button>
           </div>
           <div class="hint" style="margin-top:6px">同步会把 Bangumi 收藏里本程序没有的番剧按收藏状态自动添加（想看→想看、在看→在看、看过→看完等），只新增不覆盖本地进度。UID 在你 Bangumi 个人主页的网址里，例如 bgm.tv/user/12345 中的 12345。${bgm.lastSyncAt ? '上次同步：' + esc(formatWatchTime(new Date(bgm.lastSyncAt).toISOString())) : ''}</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>下载目录扫描</label>
+        <div class="settings-box">
+          <div class="form-actions" style="margin-top:4px">
+            <button class="btn" data-action="scan">📂 扫描下载目录…</button>
+          </div>
+          <div class="hint" style="margin-top:6px">扫描下载文件夹里的视频文件（mp4 / mkv / rmvb 等），自动识别番名与已下载集数，并与你的记录比对。</div>
         </div>
       </div>
       <div class="field">
@@ -2006,14 +2017,7 @@ function bindGlobal() {
   $('#status-filter').addEventListener('change', (e) => { state.status = e.target.value; render(); });
   $('#sort-order').addEventListener('change', (e) => { state.sort = e.target.value; render(); });
   $('#btn-add').addEventListener('click', () => openAddModal({}));
-  $('#btn-menu').addEventListener('click', (e) => {
-    e.stopPropagation();
-    $('#menu-dropdown').classList.toggle('hidden');
-  });
   document.addEventListener('click', (e) => {
-    const dd = $('#menu-dropdown');
-    if (dd && !dd.classList.contains('hidden') && !e.target.closest('.dropdown-wrap')) dd.classList.add('hidden');
-
     const nav = e.target.closest('[data-view]');
     if (nav) {
       state.view = nav.dataset.view;
