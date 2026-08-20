@@ -114,7 +114,7 @@ async function init() {
       state.seasons = seasons;
       renderSidebar();
       const bgmCfg = state.settings.bangumi || {};
-      if (bgmCfg.autoSync && bgmCfg.username) doBangumiSync(true);
+      if (bgmCfg.autoSync && bgmCfg.uid) doBangumiSync(true);
     } catch (_) { /* \u5ffd\u7565 */ }
   };
   setInterval(autoCheck, 10 * 60 * 1000);
@@ -926,10 +926,7 @@ function renderSettings(c) {
         <label>Bangumi 收藏同步</label>
         <div class="settings-box">
           <div class="row" style="margin-bottom:8px">
-            <input id="set-bgm-user" type="text" placeholder="Bangumi 用户名" value="${esc(bgm.username || '')}" style="flex:1" />
-          </div>
-          <div class="row" style="margin-bottom:8px">
-            <input id="set-bgm-token" type="password" placeholder="访问令牌（可选，私有收藏需要）" value="${esc(bgm.token || '')}" style="flex:1" />
+            <input id="set-bgm-uid" type="text" placeholder="Bangumi UID（个人主页网址里的数字）" value="${esc(bgm.uid || '')}" style="flex:1" />
           </div>
           <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <input type="checkbox" id="set-bgm-auto" ${bgm.autoSync ? 'checked' : ''} /> 启动 / 聚焦窗口时自动同步
@@ -937,7 +934,7 @@ function renderSettings(c) {
           <div class="form-actions" style="margin-top:4px">
             <button class="btn" data-action="bangumi-sync">🔄 立即同步 Bangumi 收藏</button>
           </div>
-          <div class="hint" style="margin-top:6px">同步会把 Bangumi 收藏里本程序没有的番剧按收藏状态自动添加（想看→想看、在看→在看、看过→看完等），只新增不覆盖本地进度。私有收藏请在 https://next.bgm.tv/demo/access-token 获取令牌。${bgm.lastSyncAt ? '上次同步：' + esc(formatWatchTime(new Date(bgm.lastSyncAt).toISOString())) : ''}</div>
+          <div class="hint" style="margin-top:6px">同步会把 Bangumi 收藏里本程序没有的番剧按收藏状态自动添加（想看→想看、在看→在看、看过→看完等），只新增不覆盖本地进度。UID 在你 Bangumi 个人主页的网址里，例如 bgm.tv/user/12345 中的 12345。${bgm.lastSyncAt ? '上次同步：' + esc(formatWatchTime(new Date(bgm.lastSyncAt).toISOString())) : ''}</div>
         </div>
       </div>
       <div class="field">
@@ -1791,8 +1788,7 @@ async function saveSettings() {
     },
     bangumi: {
       ...curBgm,
-      username: $('#set-bgm-user') ? $('#set-bgm-user').value.trim() : (curBgm.username || ''),
-      token: $('#set-bgm-token') ? $('#set-bgm-token').value.trim() : (curBgm.token || ''),
+      uid: $('#set-bgm-uid') ? $('#set-bgm-uid').value.trim() : (curBgm.uid || ''),
       autoSync: $('#set-bgm-auto') ? $('#set-bgm-auto').checked : !!curBgm.autoSync,
     },
   };
@@ -1805,13 +1801,13 @@ async function saveSettings() {
 
 async function doBangumiSync(silent) {
   const cfg = state.settings.bangumi || {};
-  if (!cfg.username) {
-    if (!silent) toast('请先在设置里填写 Bangumi 用户名', 'warn');
+  if (!cfg.uid) {
+    if (!silent) toast('请先在设置里填写 Bangumi UID', 'warn');
     return;
   }
   let items;
   try {
-    items = await call(api.bangumiCollections(cfg.username, cfg.token || ''));
+    items = await call(api.bangumiCollections(cfg.uid));
   } catch (e) {
     if (!silent) toast('同步失败：' + e.message, 'error');
     return;

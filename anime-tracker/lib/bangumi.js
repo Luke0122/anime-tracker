@@ -179,11 +179,13 @@ async function detail(id) {
   throw new Error('网络连接失败（请检查网络或代理，或稍后重试）');
 }
 
-// Bangumi 收藏状态映射（v0 type / legacy cat -> 本地状态）
-const V0_TYPE_TO_STATUS = { 1: 'plan', 2: 'completed', 3: 'watching', 4: 'on_hold', 5: 'dropped' };
-const LEGACY_CAT_TO_STATUS = { wish: 'plan', collect: 'completed', doing: 'watching', on_hold: 'on_hold', dropped: 'dropped' };
+// Bangumi 收藏状态映射（v0 type -> 本地状态）
+const COLLECTION_TYPE_MAP = { 1: 'plan', 2: 'completed', 3: 'watching', 4: 'on_hold', 5: 'dropped' };
 
 function normalizeCollection(row, sub, status) {
+  const eps = sub.total_episodes != null && Number(sub.total_episodes) > 0
+    ? Number(sub.total_episodes)
+    : (sub.eps && Number(sub.eps) > 0 ? Number(sub.eps) : null);
   return {
     bgmId: sub.id || null,
     title: sub.name_cn || sub.name || '',
@@ -191,54 +193,37 @@ function normalizeCollection(row, sub, status) {
     date: sub.date || null,
     status,
     episode: Number(row.ep_status) || 0,
-    totalEpisodes: sub.eps && Number(sub.eps) > 0 ? Number(sub.eps) : null,
+    totalEpisodes: eps,
     imageUrl: itemImage(sub),
   };
 }
 
-// 拉取 Bangumi 收藏：有令牌用 v0 接口，否则用公开 legacy 接口
-async function collections(username, token) {
-  const user = String(username || '').trim();
-  if (!user) throw new Error('请输入 Bangumi 用户名');
+// 拉取 Bangumi 收藏：公开接口，无需令牌（参考 Pochan 的实现）
+// GET /v0/users/{用户名或UID}/collections?subject_type=2&limit=50&offset=...
+async function collections(uid) {
+  const user = String(uid || '').trim();
+  if (!user) throw new Error('请输入 Bangumi UID');
+  const headers = { 'User-Agent': UA, 'Accept': 'application/json' };
   const out = [];
-  const tokenStr = String(token || '').trim();
-
-  if (tokenStr) {
-    const headers = { 'User-Agent': UA, 'Accept': 'application/json', 'Authorization': 'Bearer ' + tokenStr };
-    for (const type of [1, 2, 3, 4, 5]) {
-      let offset = 0;
-      for (;;) {
-        let data;
-        try {
-          data = await fetchJson(
-            `https://api.bgm.tv/v0/users/${encodeURIComponent(user)}/collections?subject_type=2&type=${type}&limit=100&offset=${offset}`,
-            { headers },
-          );
-        } catch (_) { break; }
-        const rows = (data && data.data) || [];
-        for (const row of rows) {
-          const sub = row.subject || {};
-          if (sub.id) out.push(normalizeCollection(row, sub, V0_TYPE_TO_STATUS[type]));
-        }
-        if (!data || !data.total || offset + rows.length >= data.total || !rows.length) break;
-        offset += rows.length;
-      }
-    }
-    return out;
-  }
-
-  for (const cat of Object.keys(LEGACY_CAT_TO_STATUS)) {
+  let offset = 0;
+  const limit = 50;
+  const maxItems = 500;
+  while (offset < maxItems) {
+    let data;
     try {
-      const data = await fetchJson(
-        `https://api.bgm.tv/user/${encodeURIComponent(user)}/collections?type=2&cat=${cat}&responseGroup=medium`,
-        { headers: { 'User-Agent': UA, 'Accept': 'application/json' } },
+      data = await fetchJson(
+        `https://api.bgm.tv/v0/users/${encodeURIComponent(user)}/collections?subject_type=2&limit=${limit}&offset=${offset}`,
+        { headers },
       );
-      const rows = (data && data.collects) || [];
-      for (const row of rows) {
-        const sub = row.subject || {};
-        if (sub.id) out.push(normalizeCollection(row, sub, LEGACY_CAT_TO_STATUS[cat]));
-      }
-    } catch (_) { /* 该分类读取失败则跳过 */ }
+    } catch (_) { break; }
+    const rows = (data && data.data) || [];
+    for (const row of rows) {
+      const sub = row.subject || {};
+      if (!sub.id) continue;
+      out.push(normalizeCollection(row, sub, COLLECTION_TYPE_MAP[row.type] || 'watching'));
+    }
+    if (!rows.length || !data.total || out.length >= data.total || rows.length < limit) break;
+    offset += limit;
   }
   return out;
 }

@@ -23,7 +23,7 @@ const api = {
   exportChart: (dataUrl) => ipcRenderer.invoke('data:exportChart', dataUrl),
   exportHtmlReport: (content, defaultName) => ipcRenderer.invoke('data:exportHtmlReport', content, defaultName),
   exportCalendarExcel: (data) => ipcRenderer.invoke('data:exportCalendarExcel', data),
-  bangumiCollections: (username, token) => ipcRenderer.invoke('bangumi:collections', username, token),
+  bangumiCollections: (uid) => ipcRenderer.invoke('bangumi:collections', uid),
   importJson: () => ipcRenderer.invoke('data:importJson'),
   importJsonApply: (filePath) => ipcRenderer.invoke('data:importJsonApply', filePath),
 
