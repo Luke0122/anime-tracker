@@ -66,8 +66,8 @@ function createWindow() {
     icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: mica ? '#00000000' : '#000000',
-      symbolColor: '#ffd9c9',
+      color: mica ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#000000' : '#f4f4f8'),
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#ffd9c9' : '#3a3a45',
       height: 44,
     },
     show: false,
@@ -80,6 +80,7 @@ function createWindow() {
   };
   if (mica) winOpts.backgroundMaterial = 'mica';
   mainWindow = new BrowserWindow(winOpts);
+  updateOverlayColors();
   Menu.setApplicationMenu(null);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

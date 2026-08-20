@@ -2005,6 +2005,7 @@ async function doBangumiSync(silent) {
   }
   const added = [];
   const skipped = [];
+  let progressUpdated = 0;
   for (const it of items) {
     if (!it.title) continue;
     const season = seasonFromDate(it.date);
@@ -2013,7 +2014,23 @@ async function doBangumiSync(silent) {
     if (it.bgmId) keys.push('bgm:' + it.bgmId);
     keys.push('t:' + it.title + '|' + season);
     keys.push('b:' + baseTitle(it.title) + '|' + season);
-    if (keys.some((k) => seen.has(k))) { skipped.push(it.title); continue; }
+    if (keys.some((k) => seen.has(k))) {
+      const local = state.anime.find((a) =>
+        (a.bgmId && it.bgmId && String(a.bgmId) === String(it.bgmId)) ||
+        (a.title === it.title && a.season === season));
+      const newEp = Number(it.episode) || 0;
+      if (local && newEp > (local.episode || 0)) {
+        const patch = { episode: newEp };
+        if (local.totalEpisodes && newEp >= local.totalEpisodes) patch.status = 'completed';
+        else if (local.status === 'plan' && newEp > 0) patch.status = 'watching';
+        try {
+          await call(api.updateAnime(local.id, patch));
+          progressUpdated += 1;
+        } catch (_) { /* 忽略 */ }
+      }
+      skipped.push(it.title);
+      continue;
+    }
     keys.forEach((k) => seen.add(k));
     try {
       const extra = {};
@@ -2066,10 +2083,10 @@ async function doBangumiSync(silent) {
     await call(api.updateSettings({ bangumi: cfg2 }));
     state.settings.bangumi = cfg2;
   } catch (_) { /* 忽略 */ }
-  if (!silent || added.length) {
-    toast('Bangumi 同步完成：新增 ' + added.length + ' 部，跳过 ' + skipped.length + ' 部' + (matched ? '，补全 bgmId ' + matched + ' 部' : ''), added.length ? 'success' : 'info');
+  if (!silent || added.length || progressUpdated) {
+    toast('Bangumi 同步完成：新增 ' + added.length + ' 部，更新进度 ' + progressUpdated + ' 部，跳过 ' + skipped.length + ' 部' + (matched ? '，补全 bgmId ' + matched + ' 部' : ''), (added.length || progressUpdated) ? 'success' : 'info');
   }
-  if (added.length) await refresh();
+  if (added.length || progressUpdated) await refresh();
 }
 
 async function doBackupNow() {
