@@ -9,6 +9,7 @@ const scanner = require('./lib/scanner');
 const bangumi = require('./lib/bangumi');
 const excel = require('./lib/excel');
 const backup = require('./lib/backup');
+const { shouldUseMica } = require('./lib/platform');
 const DEFAULT_BACKUP_FOLDER = 'D:\\ANIME\\anime-tracker\\自动备份';
 
 // 注册封面自定义协议（从应用包内读取内置封面）
@@ -31,17 +32,18 @@ function infoBase() {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const mica = shouldUseMica();
+  const winOpts = {
     width: 1280,
     height: 820,
     minWidth: 960,
     minHeight: 640,
     title: '番剧记录',
-    backgroundColor: '#000000',
+    backgroundColor: mica ? '#00000000' : '#000000',
     icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#000000',
+      color: mica ? '#00000000' : '#000000',
       symbolColor: '#ffd9c9',
       height: 44,
     },
@@ -52,7 +54,9 @@ function createWindow() {
       nodeIntegration: false,
       spellcheck: false,
     },
-  });
+  };
+  if (mica) winOpts.backgroundMaterial = 'mica';
+  mainWindow = new BrowserWindow(winOpts);
   Menu.setApplicationMenu(null);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

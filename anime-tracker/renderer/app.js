@@ -38,6 +38,14 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
 
+// 读取 CSS 主题变量（供 canvas 图表使用，深浅色自适应）
+const cssVar = (name, fb) => {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fb;
+  } catch (_) { return fb; }
+};
+
 const $ = (sel, root = document) => root.querySelector(sel);
 
 function currentSeasonKey() {
@@ -119,6 +127,12 @@ async function init() {
   };
   setInterval(autoCheck, 10 * 60 * 1000);
   window.addEventListener('focus', autoCheck);
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const repaintStats = () => { if (state.view === 'stats') render(); };
+    if (mq.addEventListener) mq.addEventListener('change', repaintStats);
+    else if (mq.addListener) mq.addListener(repaintStats);
+  }
 }
 
 async function refresh() {
@@ -366,7 +380,7 @@ function drawBarChart(canvas, items, opts = {}) {
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.fillStyle = '#9a9aab';
+  ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
   ctx.font = `${10 * sc}px "Microsoft YaHei UI"`;
   ctx.textAlign = 'right';
   for (let g = 0; g <= 4; g++) {
@@ -392,7 +406,7 @@ function drawBarChart(canvas, items, opts = {}) {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, barW, h, 3 * sc); else ctx.rect(x, y, barW, h);
     ctx.fill();
-    ctx.fillStyle = '#9a9aab';
+    ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
     ctx.fillText(String(it.label), x + barW / 2, H - 5 * sc);
   });
   ctx.textAlign = 'left';
@@ -408,7 +422,7 @@ function drawLineChart(canvas, items, opts = {}) {
   const padL = 30 * sc, padR = 10 * sc, padT = 10 * sc, padB = 24 * sc;
   const cw = W - padL - padR, ch = H - padT - padB;
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.fillStyle = '#9a9aab';
+  ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
   ctx.font = `${10 * sc}px "Microsoft YaHei UI"`;
   ctx.textAlign = 'right';
   for (let g = 0; g <= 4; g++) {
@@ -453,11 +467,11 @@ function drawLineChart(canvas, items, opts = {}) {
     ctx.arc(x, y, 3 * sc, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
-    ctx.strokeStyle = '#14141a';
+    ctx.strokeStyle = cssVar('--panel', '#14141a');
     ctx.lineWidth = 1.2 * sc;
     ctx.stroke();
   });
-  ctx.fillStyle = '#9a9aab';
+  ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
   ctx.textAlign = 'center';
   items.forEach((it, i) => { ctx.fillText(String(it.label), px(i), H - 5 * sc); });
   ctx.textAlign = 'left';
@@ -482,11 +496,11 @@ function drawDonut(canvas, items) {
     ctx.fill();
     start += angle;
   });
-  ctx.fillStyle = '#14141a';
+  ctx.fillStyle = cssVar('--panel', '#14141a');
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.58, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#e9e9f2';
+  ctx.fillStyle = cssVar('--text', '#e9e9f2');
   ctx.font = 'bold 14px "Microsoft YaHei UI"';
   ctx.textAlign = 'center';
   ctx.fillText(String(total), cx, cy + 5);
@@ -742,11 +756,11 @@ function svgDonut(items) {
     s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(1)} ${(circ - dash).toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
     acc += frac;
   });
-  s += `<text x="${cx}" y="${cy + 8}" fill="#e9e9f2" font-size="26" font-weight="bold" text-anchor="middle">${total}</text>`;
+  s += `<text x="${cx}" y="${cy + 8}" style="fill:var(--text)" font-size="26" font-weight="bold" text-anchor="middle">${total}</text>`;
   let ly = 22;
   for (const it of items.slice(0, 8)) {
     s += `<rect x="${W - 128}" y="${ly - 9}" width="11" height="11" rx="2.5" fill="${it.color}"/>`;
-    s += `<text x="${W - 110}" y="${ly}" fill="#c9c9d4" font-size="11.5">${esc(it.label)} · ${it.value}</text>`;
+    s += `<text x="${W - 110}" y="${ly}" style="fill:var(--muted)" font-size="11.5">${esc(it.label)} · ${it.value}</text>`;
     ly += 19;
   }
   s += '</svg>';
@@ -794,32 +808,35 @@ function buildHtmlReport(scopeKey) {
   const html = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · 番剧记录</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark; --bg:#101016; --panel:#15151c; --border:rgba(255,255,255,0.09); --rowline:rgba(255,255,255,0.05); --text:#e9e9f2; --muted:#9a9aab; --dim:#6f6f7e; --accent-2:#f7b9a0; --accent-3:#e87a52; }
+  @media (prefers-color-scheme: light) {
+    :root { color-scheme: light; --bg:#f4f4f8; --panel:#ffffff; --border:rgba(0,0,0,0.10); --rowline:rgba(0,0,0,0.06); --text:#1f1f28; --muted:#555563; --dim:#8a8a99; --accent-2:#c94f2b; --accent-3:#b9441f; }
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #101016; color: #e9e9f2; font-family: "Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; padding: 36px 24px 48px; }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; padding: 36px 24px 48px; }
   .wrap { max-width: 1180px; margin: 0 auto; }
   .head { text-align: center; margin-bottom: 28px; }
   .head h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
-  .head p { color: #9a9aab; font-size: 13.5px; margin-top: 8px; }
+  .head p { color: var(--muted); font-size: 13.5px; margin-top: 8px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .card { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 18px; text-align: center; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; text-align: center; }
   .card .num { font-size: 30px; font-weight: 800; }
-  .card .lbl { color: #9a9aab; font-size: 12.5px; margin-top: 5px; }
+  .card .lbl { color: var(--muted); font-size: 12.5px; margin-top: 5px; }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .chart { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 16px; }
-  .chart h3 { color: #9a9aab; font-size: 14px; margin-bottom: 12px; font-weight: 600; }
+  .chart { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .chart h3 { color: var(--muted); font-size: 14px; margin-bottom: 12px; font-weight: 600; }
   .chart svg { width: 100%; height: auto; display: block; }
   .lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
-  .list { background: #15151c; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 16px; }
-  .list h3 { color: #9a9aab; font-size: 14px; margin-bottom: 12px; font-weight: 600; }
-  .row { display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13.5px; }
+  .list { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .list h3 { color: var(--muted); font-size: 14px; margin-bottom: 12px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-bottom: 1px solid var(--rowline); font-size: 13.5px; }
   .row:last-child { border-bottom: none; }
-  .row .rank { color: #f7b9a0; font-weight: 700; width: 20px; }
+  .row .rank { color: var(--accent-2); font-weight: 700; width: 20px; }
   .row .t { flex: 1; }
-  .row .t em { display: block; color: #6f6f7e; font-size: 11.5px; font-style: normal; }
-  .row .r { color: #e87a52; font-weight: 600; }
-  .empty-line { color: #6f6f7e; font-size: 13px; padding: 10px 4px; }
-  .foot { text-align: center; color: #6f6f7e; font-size: 12px; margin-top: 30px; }
+  .row .t em { display: block; color: var(--dim); font-size: 11.5px; font-style: normal; }
+  .row .r { color: var(--accent-3); font-weight: 600; }
+  .empty-line { color: var(--dim); font-size: 13px; padding: 10px 4px; }
+  .foot { text-align: center; color: var(--dim); font-size: 12px; margin-top: 30px; }
 </style></head>
 <body><div class="wrap">
   <div class="head"><h1>${esc(title)}</h1><p>番剧记录 Anime Tracker · 生成于 ${dateStr} · 共 ${list.length} 部 · 累计观看 ${s.eps} 集</p></div>
