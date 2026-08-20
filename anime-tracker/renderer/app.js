@@ -1032,6 +1032,14 @@ function renderSettings(c) {
 /* ---------- 日历 ---------- */
 const cal = { year: 0, month: 0 };
 
+// 去掉「第2期 / 第二季 / シーズン」等季数后缀（同季度去重用）
+function baseTitle(t) {
+  return String(t || '').trim()
+    .replace(/[#＃]\d+(?:[~～-]\d+)?$/, '')
+    .replace(/第\s*([一二三四五六七八九十\d]+)\s*(期|季|シーズン|クール)?\s*$/, '')
+    .trim();
+}
+
 function seasonFromDate(d) {
   const m = String(d || '').match(/^(\d{4})-(\d{1,2})/);
   if (!m) return null;
@@ -1730,6 +1738,19 @@ async function doDelete() {
   if (!modal.editId) return;
   const a = state.anime.find((x) => x.id === modal.editId);
   if (!window.confirm(`确定删除「${a ? a.title : ''}」吗？`)) return;
+  if (a) {
+    const cfg = state.settings.bangumi || {};
+    const ignored = Array.isArray(cfg.ignored) ? cfg.ignored : [];
+    const rec = { bgmId: a.bgmId || null, title: a.title, season: a.season };
+    const already = ignored.some((x) => x.title === a.title && x.season === a.season);
+    if (!already) {
+      const next = { ...cfg, ignored: ignored.concat([rec]) };
+      try {
+        await call(api.updateSettings({ bangumi: next }));
+        state.settings.bangumi = next;
+      } catch (_) { /* 忽略保存失败 */ }
+    }
+  }
   try {
     await call(api.deleteAnime(modal.editId));
     toast('已删除', 'success');
@@ -1987,16 +2008,31 @@ async function doBangumiSync(silent) {
     if (!silent) toast('同步失败：' + e.message, 'error');
     return;
   }
+  const ignored = Array.isArray(cfg.ignored) ? cfg.ignored : [];
+  const seen = new Set();
+  for (const a of state.anime) {
+    if (a.bgmId) seen.add('bgm:' + a.bgmId);
+    if (a.season) {
+      seen.add('t:' + a.title + '|' + a.season);
+      seen.add('b:' + baseTitle(a.title) + '|' + a.season);
+    }
+  }
   const added = [];
   const skipped = [];
   for (const it of items) {
     if (!it.title) continue;
     const season = seasonFromDate(it.date);
     if (!season) continue;
-    const exists = state.anime.some((a) =>
-      (a.bgmId && it.bgmId && String(a.bgmId) === String(it.bgmId)) ||
-      (a.title === it.title && a.season === season));
-    if (exists) { skipped.push(it.title); continue; }
+    const ignoredHit = ignored.some((x) =>
+      (x.bgmId && it.bgmId && String(x.bgmId) === String(it.bgmId)) ||
+      (x.title && x.season && x.title === it.title && x.season === season));
+    if (ignoredHit) { skipped.push(it.title + '（已删除，不再同步）'); continue; }
+    const keys = [];
+    if (it.bgmId) keys.push('bgm:' + it.bgmId);
+    keys.push('t:' + it.title + '|' + season);
+    keys.push('b:' + baseTitle(it.title) + '|' + season);
+    if (keys.some((k) => seen.has(k))) { skipped.push(it.title); continue; }
+    keys.forEach((k) => seen.add(k));
     try {
       const extra = {};
       if (it.bgmId) {
