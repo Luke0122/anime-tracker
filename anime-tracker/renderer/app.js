@@ -1738,19 +1738,6 @@ async function doDelete() {
   if (!modal.editId) return;
   const a = state.anime.find((x) => x.id === modal.editId);
   if (!window.confirm(`确定删除「${a ? a.title : ''}」吗？`)) return;
-  if (a) {
-    const cfg = state.settings.bangumi || {};
-    const ignored = Array.isArray(cfg.ignored) ? cfg.ignored : [];
-    const rec = { bgmId: a.bgmId || null, title: a.title, season: a.season };
-    const already = ignored.some((x) => x.title === a.title && x.season === a.season);
-    if (!already) {
-      const next = { ...cfg, ignored: ignored.concat([rec]) };
-      try {
-        await call(api.updateSettings({ bangumi: next }));
-        state.settings.bangumi = next;
-      } catch (_) { /* 忽略保存失败 */ }
-    }
-  }
   try {
     await call(api.deleteAnime(modal.editId));
     toast('已删除', 'success');
@@ -2008,7 +1995,6 @@ async function doBangumiSync(silent) {
     if (!silent) toast('同步失败：' + e.message, 'error');
     return;
   }
-  const ignored = Array.isArray(cfg.ignored) ? cfg.ignored : [];
   const seen = new Set();
   for (const a of state.anime) {
     if (a.bgmId) seen.add('bgm:' + a.bgmId);
@@ -2023,10 +2009,6 @@ async function doBangumiSync(silent) {
     if (!it.title) continue;
     const season = seasonFromDate(it.date);
     if (!season) continue;
-    const ignoredHit = ignored.some((x) =>
-      (x.bgmId && it.bgmId && String(x.bgmId) === String(it.bgmId)) ||
-      (x.title && x.season && x.title === it.title && x.season === season));
-    if (ignoredHit) { skipped.push(it.title + '（已删除，不再同步）'); continue; }
     const keys = [];
     if (it.bgmId) keys.push('bgm:' + it.bgmId);
     keys.push('t:' + it.title + '|' + season);
