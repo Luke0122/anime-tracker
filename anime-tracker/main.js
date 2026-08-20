@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Store } = require('./lib/store');
@@ -23,6 +23,29 @@ app.setPath('userData', path.join(app.getPath('appData'), 'anime-tracker'));
 
 let mainWindow = null;
 let store = null;
+
+const THEME_VALUES = new Set(['system', 'dark', 'light']);
+
+function applyTheme(theme) {
+  if (THEME_VALUES.has(theme)) nativeTheme.themeSource = theme;
+  else nativeTheme.themeSource = 'system';
+  updateOverlayColors();
+}
+
+function updateOverlayColors() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const mica = shouldUseMica();
+  const dark = nativeTheme.shouldUseDarkColors;
+  mainWindow.setTitleBarOverlay({
+    color: mica ? '#00000000' : (dark ? '#000000' : '#f4f4f8'),
+    symbolColor: dark ? '#ffd9c9' : '#3a3a45',
+    height: 44,
+  });
+}
+
+nativeTheme.on('updated', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) updateOverlayColors();
+});
 
 const DEFAULT_INFO_BASE = 'D:\\ANIME\\日本TV动画信息';
 
@@ -96,7 +119,11 @@ function registerIpc() {
     warning: store.warning,
   })));
 
-  ipcMain.handle('settings:update', handle((patch) => store.updateSettings(patch)));
+  ipcMain.handle('settings:update', handle((patch) => {
+    const saved = store.updateSettings(patch);
+    if (patch && patch.theme) applyTheme(patch.theme);
+    return saved;
+  }));
 
   ipcMain.handle('season:list', handle(() => {
     const dirs = seasonData.discoverSeasons(infoBase());
@@ -226,6 +253,7 @@ app.whenReady().then(() => {
     store = new Store(path.join(app.getPath('userData'), 'data.json'));
   store.load();
   const settings = store.getSettings();
+  applyTheme(settings.theme);
   if (!settings.animeInfoBaseDir) {
     store.updateSettings({ animeInfoBaseDir: DEFAULT_INFO_BASE });
   }

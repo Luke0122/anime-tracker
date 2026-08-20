@@ -116,6 +116,7 @@ async function init() {
   bindGlobal();
   await refresh();
   const autoCheck = async () => {
+    lastAutoCheck = Date.now();
     try {
       const seasons = await call(api.listSeasons());
       detectNewSeasons(seasons);
@@ -125,8 +126,12 @@ async function init() {
       if (bgmCfg.autoSync && bgmCfg.uid) doBangumiSync(true);
     } catch (_) { /* \u5ffd\u7565 */ }
   };
+  let lastAutoCheck = Date.now();
   setInterval(autoCheck, 10 * 60 * 1000);
-  window.addEventListener('focus', autoCheck);
+  window.addEventListener('focus', () => {
+    if (Date.now() - lastAutoCheck > 60 * 1000) autoCheck();
+  });
+  setTimeout(() => { autoCheck(); }, 6000);
   if (window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     const repaintStats = () => { if (state.view === 'stats') render(); };
@@ -394,6 +399,7 @@ function drawBarChart(canvas, items, opts = {}) {
   const n = items.length;
   const slot = chartW / Math.max(1, n);
   const barW = Math.min(22 * sc, slot * 0.55);
+  const labelStep = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(chartW / 58))));
   ctx.textAlign = 'center';
   items.forEach((it, i) => {
     const h = Math.max(2, (chartH * it.value) / max);
@@ -406,8 +412,11 @@ function drawBarChart(canvas, items, opts = {}) {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, barW, h, 3 * sc); else ctx.rect(x, y, barW, h);
     ctx.fill();
-    ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
-    ctx.fillText(String(it.label), x + barW / 2, H - 5 * sc);
+    if (i % labelStep === 0) {
+      const label = String(it.label);
+      ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
+      ctx.fillText(label.length > 9 ? label.slice(0, 8) + '…' : label, x + barW / 2, H - 5 * sc);
+    }
   });
   ctx.textAlign = 'left';
 }
@@ -438,6 +447,7 @@ function drawLineChart(canvas, items, opts = {}) {
   const px = (i) => (n === 1 ? padL + cw / 2 : padL + (cw * i) / (n - 1));
   const py = (v) => padT + ch - (ch * v) / max;
   const color = opts.color || '#f89164';
+  const labelStep = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(cw / 58))));
   const grad = ctx.createLinearGradient(0, padT, 0, padT + ch);
   grad.addColorStop(0, 'rgba(248,145,100,0.30)');
   grad.addColorStop(1, 'rgba(248,145,100,0.02)');
@@ -473,7 +483,12 @@ function drawLineChart(canvas, items, opts = {}) {
   });
   ctx.fillStyle = cssVar('--text-dim', '#9a9aab');
   ctx.textAlign = 'center';
-  items.forEach((it, i) => { ctx.fillText(String(it.label), px(i), H - 5 * sc); });
+  items.forEach((it, i) => {
+    if (i % labelStep === 0) {
+      const label = String(it.label);
+      ctx.fillText(label.length > 9 ? label.slice(0, 8) + '…' : label, px(i), H - 5 * sc);
+    }
+  });
   ctx.textAlign = 'left';
 }
 
@@ -913,9 +928,19 @@ async function doExportStatsChart() {
 function renderSettings(c) {
   const ab = state.settings.autoBackup || {};
   const bgm = state.settings.bangumi || {};
+  const theme = state.settings.theme || 'system';
   c.innerHTML = `
     <div class="view-head"><h1>设置</h1></div>
     <div class="settings-panel">
+      <div class="field">
+        <label>外观主题</label>
+        <select id="set-theme">
+          <option value="system" ${theme === 'system' ? 'selected' : ''}>跟随系统</option>
+          <option value="dark" ${theme === 'dark' ? 'selected' : ''}>深色</option>
+          <option value="light" ${theme === 'light' ? 'selected' : ''}>浅色</option>
+        </select>
+        <div class="hint" style="margin-top:6px">跟随系统 = 按 Windows 深浅色自动切换；Mica 云母背景与标题栏按钮颜色会随主题变化。</div>
+      </div>
       <div class="field">
         <label>动画信息数据目录（读取当季新番）</label>
         <input id="set-base" type="text" value="${esc(state.settings.animeInfoBaseDir || '')}" />
@@ -988,6 +1013,16 @@ function renderSettings(c) {
       call(api.updateSettings({ bangumi: next })).then(() => {
         state.settings.bangumi = next;
         toast(autoEl.checked ? '已开启自动同步' : '已关闭自动同步', 'success');
+      }).catch(() => { /* 已提示 */ });
+    });
+  }
+  const themeEl = $('#set-theme');
+  if (themeEl) {
+    themeEl.addEventListener('change', () => {
+      const theme = themeEl.value;
+      call(api.updateSettings({ theme })).then(() => {
+        state.settings.theme = theme;
+        toast(theme === 'system' ? '已切换为跟随系统' : theme === 'dark' ? '已切换为深色' : '已切换为浅色', 'success');
       }).catch(() => { /* 已提示 */ });
     });
   }
@@ -1834,6 +1869,7 @@ async function saveSettings() {
   const cur = state.settings.autoBackup || {};
   const curBgm = state.settings.bangumi || {};
   const patch = {
+    theme: $('#set-theme') ? $('#set-theme').value : (state.settings.theme || 'system'),
     animeInfoBaseDir: base,
     autoBackup: {
       ...cur,
