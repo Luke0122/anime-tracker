@@ -78,6 +78,24 @@ function itemImage(s) {
   return (s.images && (s.images.large || s.images.common || s.images.medium)) || null;
 }
 
+// 从 Bangumi characters 接口提取主要声优（角色名（声优名））
+function castFromCharacters(chars, maxN = 8) {
+  const out = [];
+  for (const c of (chars || [])) {
+    const cname = (c && (c.name_cn || c.name)) || '';
+    const actors = (c && c.actors) || [];
+    if (actors.length) {
+      const a = actors[0] || {};
+      const aname = (a.name_cn || a.name) || '';
+      out.push(aname ? cname + '（' + aname + '）' : cname);
+    } else if (cname) {
+      out.push(cname);
+    }
+    if (out.length >= maxN) break;
+  }
+  return out.join('、') || null;
+}
+
 // 从 Bangumi infobox 提取制作公司（动画制作 / 制作 / スタジオ）
 function studioFromInfobox(infobox) {
   const rows = Array.isArray(infobox) ? infobox : [];
@@ -165,7 +183,16 @@ async function detail(id) {
     const s = await fetchJson(`${DETAIL_URL}/${encodeURIComponent(id)}`, {
       headers: { 'User-Agent': UA, 'Accept': 'application/json' },
     });
-    if (s && s.id) return normalizeDetail(s);
+    if (s && s.id) {
+      const d = normalizeDetail(s);
+      try {
+        const chars = await fetchJson(`${DETAIL_URL}/${encodeURIComponent(id)}/characters`, {
+          headers: { 'User-Agent': UA, 'Accept': 'application/json' },
+        });
+        d.cast = castFromCharacters(chars);
+      } catch (_) { d.cast = null; }
+      return d;
+    }
   } catch (_) { /* fall through */ }
 
   try {

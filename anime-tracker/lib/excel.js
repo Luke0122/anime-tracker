@@ -382,50 +382,65 @@ async function exportExcel(filePath, anime) {
   return filePath;
 }
 
-// 日历导出：播出日历 + 每日观看明细 两个工作表
+// 日历导出：播出日历 / 每日观看明细，均按「每周一行、7 列 = 周日~周六」的日历格式
 async function exportCalendarExcel(filePath, data) {
   const wb = new ExcelJS.Workbook();
+  const year = Number(data.year) || new Date().getFullYear();
+  const month = Number(data.month) || new Date().getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDow = new Date(year, month - 1, 1).getDay(); // 0 = 周日
   const pad = (n) => String(n).padStart(2, '0');
-  const weekdayOf = (d) => {
-    const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
-    return Number.isFinite(dt.getTime()) ? DAY_LABELS[dt.getDay()] : '';
-  };
+  const dateKey = (d) => `${year}-${pad(month)}-${pad(d)}`;
   const title = (data && data.title) || '番剧日历';
+  const byDate = (arr) => {
+    const map = {};
+    for (const it of (arr || [])) {
+      if (!it || !it.date) continue;
+      (map[it.date] = map[it.date] || []).push(it);
+    }
+    return map;
+  };
+  const schedByDate = byDate(data.schedule);
+  const dailyByDate = byDate(data.daily);
+  const weekCount = Math.ceil((firstDow + daysInMonth) / 7);
 
-  const ws1 = wb.addWorksheet('播出日历');
-  ws1.mergeCells('A1:C1');
-  setCell(ws1.getCell('A1'), title + ' · 播出日期', { size: 15, bold: true, align: 'center', fill: C.section, color: C.sectionText });
-  ws1.getRow(1).height = 28;
-  ['日期', '星期', '番剧'].forEach((h, i) => {
-    setCell(ws1.getCell(String.fromCharCode(65 + i) + 2), h, { size: 11, bold: true, align: 'center', fill: C.header, color: C.headerText });
-  });
-  const sched = (data && data.schedule ? data.schedule : []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  sched.forEach((it, i) => {
-    const row = i + 3;
-    setCell(ws1.getCell('A' + row), String(it.date), { size: 11, align: 'center', fill: i % 2 === 1 ? C.alt : undefined });
-    setCell(ws1.getCell('B' + row), weekdayOf(it.date), { size: 11, align: 'center', fill: i % 2 === 1 ? C.alt : undefined });
-    setCell(ws1.getCell('C' + row), String(it.title), { size: 11, fill: i % 2 === 1 ? C.alt : undefined });
-  });
-  ws1.columns = [{ width: 14 }, { width: 10 }, { width: 44 }];
-  ws1.views = [{ state: 'frozen', ySplit: 2 }];
+  function buildCalendarSheet(name, header, cellText) {
+    const ws = wb.addWorksheet(name);
+    ws.mergeCells('A1:G1');
+    setCell(ws.getCell('A1'), `${title} · ${header}（每周一行）`, { size: 15, bold: true, align: 'center', fill: C.section, color: C.sectionText });
+    ws.getRow(1).height = 28;
+    DAY_LABELS.forEach((h, col) => {
+      setCell(ws.getCell(String.fromCharCode(65 + col) + 2), h, { size: 11, bold: true, align: 'center', fill: C.header, color: C.headerText });
+    });
+    let row = 3;
+    for (let w = 0; w < weekCount; w++) {
+      let maxLines = 1;
+      for (let col = 0; col < 7; col++) {
+        const d = w * 7 + col - firstDow + 1;
+        const cell = ws.getCell(String.fromCharCode(65 + col) + row);
+        if (d >= 1 && d <= daysInMonth) {
+          const key = dateKey(d);
+          const lines = [`${month}/${d}`];
+          const parts = cellText(key) || [];
+          for (const line of parts) lines.push(line);
+          setCell(cell, lines.join('\n'), {
+            size: 10, wrap: true, align: 'left',
+            fill: w % 2 === 1 ? C.alt : undefined,
+          });
+          maxLines = Math.max(maxLines, lines.length);
+        } else {
+          setCell(cell, '', { size: 10, fill: 'FF13131A' });
+        }
+      }
+      ws.getRow(row).height = Math.min(240, 14 * maxLines + 10);
+      row += 1;
+    }
+    ws.columns = Array.from({ length: 7 }, () => ({ width: 24 }));
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+  }
 
-  const ws2 = wb.addWorksheet('每日观看明细');
-  ws2.mergeCells('A1:D1');
-  setCell(ws2.getCell('A1'), title + ' · 每日观看明细', { size: 15, bold: true, align: 'center', fill: C.section, color: C.sectionText });
-  ws2.getRow(1).height = 28;
-  ['日期', '星期', '番剧', '观看集数'].forEach((h, i) => {
-    setCell(ws2.getCell(String.fromCharCode(65 + i) + 2), h, { size: 11, bold: true, align: 'center', fill: C.header, color: C.headerText });
-  });
-  const daily = (data && data.daily ? data.daily : []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  daily.forEach((it, i) => {
-    const row = i + 3;
-    setCell(ws2.getCell('A' + row), String(it.date), { size: 11, align: 'center', fill: i % 2 === 1 ? C.alt : undefined });
-    setCell(ws2.getCell('B' + row), weekdayOf(it.date), { size: 11, align: 'center', fill: i % 2 === 1 ? C.alt : undefined });
-    setCell(ws2.getCell('C' + row), String(it.title), { size: 11, fill: i % 2 === 1 ? C.alt : undefined });
-    setCell(ws2.getCell('D' + row), String(it.eps), { size: 11, align: 'center', fill: i % 2 === 1 ? C.alt : undefined });
-  });
-  ws2.columns = [{ width: 14 }, { width: 10 }, { width: 44 }, { width: 18 }];
-  ws2.views = [{ state: 'frozen', ySplit: 2 }];
+  buildCalendarSheet('播出日历', '播出日历', (key) => (schedByDate[key] || []).map((x) => x.title));
+  buildCalendarSheet('每日观看明细', '每日观看明细', (key) => (dailyByDate[key] || []).map((x) => `${x.title} 第${x.eps}集`));
 
   await wb.xlsx.writeFile(filePath);
   return filePath;

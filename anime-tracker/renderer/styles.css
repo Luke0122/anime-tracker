@@ -646,4 +646,5 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
   font-size: 13px;
 }
 .cal-daily-date { color: var(--accent-2); font-weight: 700; min-width: 92px; }
+.card { cursor: pointer; }
 .cal-daily-items { color: var(--text); line-height: 1.6; }

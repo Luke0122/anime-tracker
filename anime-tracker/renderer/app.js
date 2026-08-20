@@ -193,7 +193,7 @@ function cardHTML(a) {
        <button class="btn" data-action="complete" data-id="${a.id}">看完</button>
        <button class="btn" data-action="edit" data-id="${a.id}">编辑</button>`;
   return `
-  <div class="card">
+  <div class="card" data-action="edit" data-id="${a.id}" title="点击卡片编辑">
     <div class="card-top">
       ${cover}
       <div>
@@ -1017,8 +1017,15 @@ async function fetchMissingAirdates() {
   for (const a of pending) {
     try {
       const d = await call(api.bangumiDetail(a.bgmId));
-      if (d && Array.isArray(d.airdates) && d.airdates.length) {
-        await call(api.updateAnime(a.id, { airdates: d.airdates }));
+      const patch = {};
+      if (Array.isArray(d.airdates) && d.airdates.length && !(Array.isArray(a.airdates) && a.airdates.length)) patch.airdates = d.airdates;
+      if (d.studio && !a.studio) patch.studio = d.studio;
+      if (d.tags && !a.tags) patch.tags = d.tags;
+      if (d.cast && !a.cast) patch.cast = d.cast;
+      if (d.summary && !a.summary) patch.summary = d.summary;
+      if (d.imageUrl && !a.coverUrl) patch.coverUrl = d.imageUrl;
+      if (Object.keys(patch).length) {
+        await call(api.updateAnime(a.id, patch));
         got += 1;
       }
     } catch (_) { /* 单条失败跳过 */ }
@@ -1129,6 +1136,8 @@ async function doExportCalendar() {
   try {
     const p = await call(api.exportCalendarExcel({
       title: year + '年' + month + '月',
+      year,
+      month,
       defaultName: '番剧记录-日历-' + year + '-' + String(month).padStart(2, '0') + '.xlsx',
       schedule,
       daily,
@@ -1287,6 +1296,7 @@ function formHTML() {
     <div class="form-field full"><label>短评（可选）</label><textarea id="f-comment" placeholder="一句话记录观感…"></textarea></div>
     <div class="form-field"><label>制作公司（可选）</label><input id="f-studio" type="text" placeholder="如 Studio Bind" /></div>
     <div class="form-field"><label>题材标签（可选，顿号/逗号分隔）</label><input id="f-tags" type="text" placeholder="如 异世界、奇幻、冒险" /></div>
+    <div class="form-field full"><label>主要声优（可选，可点「从 Bangumi 补全」自动填写）</label><input id="f-cast" type="text" placeholder="如 鲁迪乌斯·格雷拉特（内山夕实）…" /></div>
     <div class="form-field full"><label>关联下载文件夹（可选，多个用分号隔开）</label><input id="f-folders" type="text" placeholder="如 D:\\ANIME\\花织" /></div>
     ${isEdit ? `
     <div class="form-field full">
@@ -1296,6 +1306,7 @@ function formHTML() {
   </div>
   <div class="form-actions">
     ${isEdit ? '<button class="btn btn-danger" data-action="delete">删除</button>' : ''}
+    ${isEdit ? '<button class="btn" data-action="bgm-fill">🔍 从 Bangumi 补全</button>' : ''}
     <span style="flex:1"></span>
     <button class="btn" data-action="close">取消</button>
     <button class="btn btn-primary" data-action="save">保存</button>
@@ -1394,6 +1405,7 @@ function fillForm(v) {
   $('#f-comment').value = v.comment || '';
   if ($('#f-studio')) $('#f-studio').value = v.studio || '';
   if ($('#f-tags')) $('#f-tags').value = v.tags || '';
+  if ($('#f-cast')) $('#f-cast').value = v.cast || '';
   $('#f-folders').value = Array.isArray(v.folders) ? v.folders.join('; ') : '';
   renderWatchLog(v.watchLog);
 }
@@ -1522,6 +1534,7 @@ async function doBgmDetail(id) {
       summary: d.summary,
       studio: d.studio || '',
       tags: d.tags || '',
+      cast: d.cast || '',
     };
     if (d.date) {
       const dm = String(d.date).match(/^(\d{4})-(\d{1,2})/);
@@ -1572,6 +1585,7 @@ async function submitForm() {
     comment: $('#f-comment').value.trim(),
     studio: $('#f-studio').value.trim(),
     tags: $('#f-tags').value.trim(),
+    cast: $('#f-cast').value.trim(),
     folders: $('#f-folders').value.split(/[;；,，]/).map((s) => s.trim()).filter(Boolean),
     watchLog: collectWatchLog(),
     ...modal.selected,
@@ -1799,15 +1813,86 @@ async function saveSettings() {
   } catch (e) { /* 已提示 */ }
 }
 
+async function doBgmFill() {
+  if (!modal.editId) return;
+  const a = state.anime.find((x) => x.id === modal.editId);
+  if (!a) return;
+  let id = a.bgmId;
+  if (!id) {
+    try {
+      const items = await call(api.searchBangumi(a.title));
+      const hit = items.find((it) => it.title === a.title) || items[0];
+      if (!hit) { toast('Bangumi 未找到「' + a.title + '」', 'warn'); return; }
+      id = hit.bgmId;
+    } catch (e) { toast('搜索失败：' + e.message, 'error'); return; }
+  }
+  try {
+    const d = await call(api.bangumiDetail(id));
+    fillForm({
+      ...a,
+      title: d.title || a.title,
+      totalEpisodes: d.totalEpisodes != null ? d.totalEpisodes : (a.totalEpisodes ?? null),
+      bgmId: d.bgmId || a.bgmId,
+      coverUrl: d.imageUrl || a.coverUrl,
+      summary: d.summary || a.summary,
+      studio: d.studio || a.studio || '',
+      tags: d.tags || a.tags || '',
+      cast: d.cast || a.cast || '',
+      airdates: d.airdates || a.airdates || [],
+    });
+    modal.selected = {
+      bgmId: d.bgmId || a.bgmId,
+      coverUrl: d.imageUrl || a.coverUrl,
+      summary: d.summary || a.summary,
+      airdates: d.airdates || a.airdates || [],
+    };
+    toast('已从 Bangumi 补全「' + a.title + '」的信息，保存后生效', 'success');
+  } catch (e) { toast('获取 Bangumi 详情失败：' + e.message, 'error'); }
+}
+
+async function doBangumiEnrich() {
+  const pending = state.anime.filter((a) => a.bgmId);
+  if (!pending.length) { toast('没有需要补全的番剧（还没有带 bgmId 的条目，可先同步收藏或从 Bangumi 添加）', 'info'); return; }
+  let done = 0;
+  for (const a of pending) {
+    try {
+      const d = await call(api.bangumiDetail(a.bgmId));
+      const patch = {};
+      if (d.studio && !a.studio) patch.studio = d.studio;
+      if (d.tags && !a.tags) patch.tags = d.tags;
+      if (d.cast && !a.cast) patch.cast = d.cast;
+      if (d.summary && !a.summary) patch.summary = d.summary;
+      if (Array.isArray(d.airdates) && d.airdates.length && !(Array.isArray(a.airdates) && a.airdates.length)) patch.airdates = d.airdates;
+      if (d.imageUrl && !a.coverUrl) patch.coverUrl = d.imageUrl;
+      if (d.totalEpisodes && !a.totalEpisodes) patch.totalEpisodes = d.totalEpisodes;
+      if (Object.keys(patch).length) {
+        await call(api.updateAnime(a.id, patch));
+        done += 1;
+      }
+    } catch (_) { /* 单条失败跳过 */ }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+  toast('Bangumi 信息补全完成：更新 ' + done + ' 部', done ? 'success' : 'info');
+  await refresh();
+}
+
 async function doBangumiSync(silent) {
   const cfg = state.settings.bangumi || {};
-  if (!cfg.uid) {
+  const uidInput = $('#set-bgm-uid');
+  const uid = (uidInput && uidInput.value.trim()) || cfg.uid || '';
+  if (!uid) {
     if (!silent) toast('请先在设置里填写 Bangumi UID', 'warn');
     return;
   }
+  if (uid !== cfg.uid) {
+    try {
+      await call(api.updateSettings({ bangumi: { ...cfg, uid } }));
+      state.settings.bangumi = { ...cfg, uid };
+    } catch (_) { /* 忽略 */ }
+  }
   let items;
   try {
-    items = await call(api.bangumiCollections(cfg.uid));
+    items = await call(api.bangumiCollections(uid));
   } catch (e) {
     if (!silent) toast('同步失败：' + e.message, 'error');
     return;
@@ -1847,7 +1932,7 @@ async function doBangumiSync(silent) {
       } catch (_) { /* 忽略 */ }
     }
   }
-  const cfg2 = { ...cfg, lastSyncAt: new Date().toISOString() };
+  const cfg2 = { ...(state.settings.bangumi || {}), lastSyncAt: new Date().toISOString() };
   try {
     await call(api.updateSettings({ bangumi: cfg2 }));
     state.settings.bangumi = cfg2;
@@ -1934,6 +2019,8 @@ function handleAction(el, e) {
     case 'cal-next': calMove(1); break;
     case 'cal-export': doExportCalendar(); break;
     case 'bangumi-sync': doBangumiSync(false); break;
+    case 'bgm-fill': doBgmFill(); break;
+    case 'bangumi-enrich': doBangumiEnrich(); break;
     default: break;
   }
 }

@@ -79,6 +79,7 @@ function validateEntry(input) {
       comment: e.comment ? String(e.comment) : '',
       studio: e.studio ? String(e.studio).trim() : '',
       tags: e.tags ? String(e.tags).trim() : '',
+      cast: e.cast ? String(e.cast).trim() : '',
       airdates: Array.isArray(e.airdates) ? e.airdates.map((x) => String(x).slice(0, 10)).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0, 300) : [],
       folders: Array.isArray(e.folders) ? e.folders.filter((f) => f && String(f).trim()) : [],
       bgmId: e.bgmId || null,
