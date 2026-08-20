@@ -933,6 +933,7 @@ function renderSettings(c) {
           </label>
           <div class="form-actions" style="margin-top:4px">
             <button class="btn" data-action="bangumi-sync">🔄 立即同步 Bangumi 收藏</button>
+            <button class="btn" data-action="bangumi-enrich">🔍 补全 Bangumi 信息</button>
           </div>
           <div class="hint" style="margin-top:6px">同步会把 Bangumi 收藏里本程序没有的番剧按收藏状态自动添加（想看→想看、在看→在看、看过→看完等），只新增不覆盖本地进度。UID 在你 Bangumi 个人主页的网址里，例如 bgm.tv/user/12345 中的 12345。${bgm.lastSyncAt ? '上次同步：' + esc(formatWatchTime(new Date(bgm.lastSyncAt).toISOString())) : ''}</div>
         </div>
@@ -1544,12 +1545,46 @@ async function doBgmDetail(id) {
       }
     }
     fillForm(v);
-    modal.selected = { bgmId: d.bgmId, coverUrl: d.imageUrl, summary: d.summary };
+    modal.selected = { bgmId: d.bgmId, coverUrl: d.imageUrl, summary: d.summary, airdates: d.airdates || [] };
     switchTab('manual');
     toast(`已从 Bangumi 填充「${v.title}」，可修改后保存`, 'success');
   } catch (e) {
     toast('获取详情失败：' + e.message, 'error');
   }
+}
+
+async function autoFillFromBangumi(title, bgmId) {
+  let id = bgmId;
+  if (!id) {
+    try {
+      const items = await call(api.searchBangumi(title));
+      const hit = items.find((it) => it.title === title) || items[0];
+      if (!hit) return;
+      id = hit.bgmId;
+    } catch (_) { return; }
+  }
+  try {
+    const d = await call(api.bangumiDetail(id));
+    const v = {
+      title: d.title || title,
+      totalEpisodes: d.totalEpisodes != null ? d.totalEpisodes : null,
+      bgmId: d.bgmId || id,
+      coverUrl: d.imageUrl,
+      summary: d.summary,
+      studio: d.studio || '',
+      tags: d.tags || '',
+      cast: d.cast || '',
+      airdates: d.airdates || [],
+    };
+    fillForm(v);
+    modal.selected = {
+      bgmId: v.bgmId,
+      coverUrl: v.coverUrl,
+      summary: v.summary,
+      airdates: v.airdates,
+    };
+    toast('已自动从 Bangumi 补全「' + v.title + '」的信息', 'success');
+  } catch (_) { /* 静默失败，保留原填充 */ }
 }
 
 function seasonPick(el) {
@@ -1569,7 +1604,8 @@ function seasonPick(el) {
   };
   fillForm(v);
   switchTab('manual');
-  toast(`已填充「${v.title}」，可修改后保存`, 'success');
+  toast(`已填充「${v.title}」，正在自动补全 Bangumi 信息…`, 'info');
+  autoFillFromBangumi(v.title, v.bgmId);
 }
 
 async function submitForm() {
@@ -1908,19 +1944,38 @@ async function doBangumiSync(silent) {
       (a.title === it.title && a.season === season));
     if (exists) { skipped.push(it.title); continue; }
     try {
+      const extra = {};
+      if (it.bgmId) {
+        try {
+          const d = await call(api.bangumiDetail(it.bgmId));
+          extra.studio = d.studio || '';
+          extra.tags = d.tags || '';
+          extra.cast = d.cast || '';
+          extra.summary = d.summary || '';
+          extra.airdates = d.airdates || [];
+          extra.coverUrl = d.imageUrl || it.imageUrl || '';
+          extra.totalEpisodes = d.totalEpisodes != null ? d.totalEpisodes : it.totalEpisodes;
+        } catch (_) { /* 详情失败则用收藏基础信息 */ }
+      }
       await call(api.addAnime({
         title: it.title,
         season,
         status: it.status,
         episode: it.episode,
-        totalEpisodes: it.totalEpisodes,
+        totalEpisodes: extra.totalEpisodes != null ? extra.totalEpisodes : it.totalEpisodes,
         bgmId: it.bgmId,
-        coverUrl: it.imageUrl,
+        coverUrl: extra.coverUrl || it.imageUrl || '',
+        studio: extra.studio || '',
+        tags: extra.tags || '',
+        cast: extra.cast || '',
+        summary: extra.summary || '',
+        airdates: extra.airdates || [],
       }));
       added.push(it.title);
     } catch (e) {
       skipped.push(it.title + '（' + e.message + '）');
     }
+    await new Promise((r) => setTimeout(r, 600));
   }
   let matched = 0;
   for (const it of items) {

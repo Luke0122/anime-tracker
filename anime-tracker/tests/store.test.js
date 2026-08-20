@@ -213,3 +213,24 @@ test('airdates are stored and normalized', () => {
   const a = s.add({ title: '带播出日期', season: '2026-07', status: 'watching', episode: 1, airdates: ['2026-07-05', 'bad', '2026-07-12T00:00:00Z'] });
   assert.deepEqual(a.airdates, ['2026-07-05', '2026-07-12T00:00:00Z'.slice(0, 10)]);
 });
+
+
+test('add completed fills watchLog for all episodes', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '看完补全', season: '2026-07', status: 'completed', episode: 5, totalEpisodes: 12 });
+  assert.equal(a.status, 'completed');
+  assert.equal(a.episode, 12);
+  assert.equal(a.watchLog.length, 12);
+  assert.deepEqual(a.watchLog.map((x) => x.episode), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+});
+
+test('update to completed fills watchLog for all episodes', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '改成看完', season: '2026-07', status: 'watching', episode: 2, totalEpisodes: 6 });
+  const u = s.update(a.id, { status: 'completed' });
+  assert.equal(u.status, 'completed');
+  assert.equal(u.episode, 6);
+  assert.equal(u.watchLog.length, 6);
+});

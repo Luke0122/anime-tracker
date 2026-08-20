@@ -190,6 +190,10 @@ class Store {
   add(input) {
     const { errors, entry } = validateEntry(input);
     if (errors.length) throw new Error(errors.join('；'));
+    if (entry.status === 'completed') {
+      entry.watchLog = this._ensureAllWatched(entry.watchLog, entry.totalEpisodes || entry.episode);
+      entry.episode = entry.watchLog.length ? Math.max(...entry.watchLog.map((x) => x.episode)) : entry.episode;
+    }
     const exists = this.data.anime.some((a) => a.title === entry.title && a.season === entry.season);
     if (exists) throw new Error(`\u5df2\u5b58\u5728\u300c${entry.title}\u300d\uff08${entry.season}\uff09`);
     const now = nowIso();
@@ -228,6 +232,10 @@ class Store {
     const merged = { ...this.data.anime[idx], ...(patch || {}) };
     const { errors, entry } = validateEntry(merged);
     if (errors.length) throw new Error(errors.join('；'));
+    if (entry.status === 'completed') {
+      entry.watchLog = this._ensureAllWatched(entry.watchLog, entry.totalEpisodes || entry.episode);
+      entry.episode = entry.watchLog.length ? Math.max(...entry.watchLog.map((x) => x.episode)) : entry.episode;
+    }
     entry.id = id;
     entry.createdAt = this.data.anime[idx].createdAt;
     entry.updatedAt = nowIso();
