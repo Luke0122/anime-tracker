@@ -429,7 +429,7 @@ async function exportCalendarExcel(filePath, data) {
           });
           maxLines = Math.max(maxLines, lines.length);
         } else {
-          setCell(cell, '', { size: 10, fill: 'FF13131A' });
+          setCell(cell, '', { size: 10, border: false });
         }
       }
       ws.getRow(row).height = Math.min(240, 14 * maxLines + 10);
