@@ -79,6 +79,7 @@ function validateEntry(input) {
       comment: e.comment ? String(e.comment) : '',
       studio: e.studio ? String(e.studio).trim() : '',
       tags: e.tags ? String(e.tags).trim() : '',
+      airdates: Array.isArray(e.airdates) ? e.airdates.map((x) => String(x).slice(0, 10)).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0, 300) : [],
       folders: Array.isArray(e.folders) ? e.folders.filter((f) => f && String(f).trim()) : [],
       bgmId: e.bgmId || null,
       bgmUrl: e.bgmUrl || null,
@@ -260,9 +261,10 @@ class Store {
     const completed = !!(a.totalEpisodes && next >= a.totalEpisodes);
     let watchLog = [...(a.watchLog || []), { episode: next, at: nowIso() }];
     if (completed) watchLog = this._ensureAllWatched(watchLog, a.totalEpisodes);
+    const nextStatus = completed ? 'completed' : (a.status === 'plan' ? 'watching' : a.status);
     return this.update(id, {
       episode: next,
-      status: completed ? 'completed' : a.status,
+      status: nextStatus,
       watchLog,
     });
   }

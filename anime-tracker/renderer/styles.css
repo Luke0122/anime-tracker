@@ -603,3 +603,47 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 }
 .chart-card h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; }
 .chart-card canvas { width: 100%; height: auto; display: block; }
+
+/* ---------- 日历 ---------- */
+.cal-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.cal-title { font-size: 17px; font-weight: 700; min-width: 130px; text-align: center; }
+.cal-legend { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12.5px; }
+.cal-legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.cal-legend .dot.bcast { background: rgba(138, 180, 248, 0.55); }
+.cal-legend .dot.watch { background: rgba(126, 226, 168, 0.55); }
+.cal-note { color: var(--text-dim); font-size: 12.5px; margin-bottom: 10px; }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.cal-head { text-align: center; color: var(--text-muted); font-size: 12px; font-weight: 600; padding: 4px 0; }
+.cal-cell {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 96px;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+.cal-cell.empty { background: transparent; border-color: transparent; min-height: 0; }
+.cal-cell.today { border-color: var(--accent-3); box-shadow: 0 0 0 1px var(--accent-3) inset; }
+.cal-day { font-size: 12px; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; }
+.cal-cell.today .cal-day { color: var(--accent); }
+.cal-watch { font-size: 11px; color: var(--green); line-height: 1.5; }
+.cal-watch em { font-style: normal; color: var(--text-muted); }
+.cal-bcast { font-size: 11px; color: var(--blue); line-height: 1.5; opacity: 0.85; }
+.cal-bcast.more { color: var(--text-dim); }
+.cal-daily-list { display: flex; flex-direction: column; gap: 8px; }
+.cal-daily-row {
+  display: flex;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  font-size: 13px;
+}
+.cal-daily-date { color: var(--accent-2); font-weight: 700; min-width: 92px; }
+.cal-daily-items { color: var(--text); line-height: 1.6; }

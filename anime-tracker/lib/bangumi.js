@@ -123,6 +123,9 @@ function normalizeDetail(s) {
     summary: s.summary || null,
     studio: studioFromInfobox(s.infobox),
     tags: Array.isArray(s.tags) ? s.tags.map((t) => (t && t.name) || '').filter(Boolean).join('、') : null,
+    airdates: Array.isArray(s.eps)
+      ? s.eps.map((e) => (e && e.airdate ? String(e.airdate).slice(0, 10) : '')).filter(Boolean).sort()
+      : null,
   };
 }
 
@@ -176,4 +179,68 @@ async function detail(id) {
   throw new Error('网络连接失败（请检查网络或代理，或稍后重试）');
 }
 
-module.exports = { search, detail };
+// Bangumi 收藏状态映射（v0 type / legacy cat -> 本地状态）
+const V0_TYPE_TO_STATUS = { 1: 'plan', 2: 'completed', 3: 'watching', 4: 'on_hold', 5: 'dropped' };
+const LEGACY_CAT_TO_STATUS = { wish: 'plan', collect: 'completed', doing: 'watching', on_hold: 'on_hold', dropped: 'dropped' };
+
+function normalizeCollection(row, sub, status) {
+  return {
+    bgmId: sub.id || null,
+    title: sub.name_cn || sub.name || '',
+    nameCn: sub.name_cn || '',
+    date: sub.date || null,
+    status,
+    episode: Number(row.ep_status) || 0,
+    totalEpisodes: sub.eps && Number(sub.eps) > 0 ? Number(sub.eps) : null,
+    imageUrl: itemImage(sub),
+  };
+}
+
+// 拉取 Bangumi 收藏：有令牌用 v0 接口，否则用公开 legacy 接口
+async function collections(username, token) {
+  const user = String(username || '').trim();
+  if (!user) throw new Error('请输入 Bangumi 用户名');
+  const out = [];
+  const tokenStr = String(token || '').trim();
+
+  if (tokenStr) {
+    const headers = { 'User-Agent': UA, 'Accept': 'application/json', 'Authorization': 'Bearer ' + tokenStr };
+    for (const type of [1, 2, 3, 4, 5]) {
+      let offset = 0;
+      for (;;) {
+        let data;
+        try {
+          data = await fetchJson(
+            `https://api.bgm.tv/v0/users/${encodeURIComponent(user)}/collections?subject_type=2&type=${type}&limit=100&offset=${offset}`,
+            { headers },
+          );
+        } catch (_) { break; }
+        const rows = (data && data.data) || [];
+        for (const row of rows) {
+          const sub = row.subject || {};
+          if (sub.id) out.push(normalizeCollection(row, sub, V0_TYPE_TO_STATUS[type]));
+        }
+        if (!data || !data.total || offset + rows.length >= data.total || !rows.length) break;
+        offset += rows.length;
+      }
+    }
+    return out;
+  }
+
+  for (const cat of Object.keys(LEGACY_CAT_TO_STATUS)) {
+    try {
+      const data = await fetchJson(
+        `https://api.bgm.tv/user/${encodeURIComponent(user)}/collections?type=2&cat=${cat}&responseGroup=medium`,
+        { headers: { 'User-Agent': UA, 'Accept': 'application/json' } },
+      );
+      const rows = (data && data.collects) || [];
+      for (const row of rows) {
+        const sub = row.subject || {};
+        if (sub.id) out.push(normalizeCollection(row, sub, LEGACY_CAT_TO_STATUS[cat]));
+      }
+    } catch (_) { /* 该分类读取失败则跳过 */ }
+  }
+  return out;
+}
+
+module.exports = { search, detail, collections };

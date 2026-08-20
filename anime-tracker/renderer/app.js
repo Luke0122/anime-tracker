@@ -113,6 +113,8 @@ async function init() {
       detectNewSeasons(seasons);
       state.seasons = seasons;
       renderSidebar();
+      const bgmCfg = state.settings.bangumi || {};
+      if (bgmCfg.autoSync && bgmCfg.username) doBangumiSync(true);
     } catch (_) { /* \u5ffd\u7565 */ }
   };
   setInterval(autoCheck, 10 * 60 * 1000);
@@ -156,6 +158,7 @@ function renderSidebar() {
 function render() {
   const c = $('#content');
   if (state.view === 'stats') return renderStats(c);
+  if (state.view === 'calendar') return renderCalendar(c);
   if (state.view === 'all') return renderAll(c);
   if (state.view === 'settings') return renderSettings(c);
   return renderSeason(c, state.view);
@@ -890,6 +893,7 @@ async function doExportStatsChart() {
 
 function renderSettings(c) {
   const ab = state.settings.autoBackup || {};
+  const bgm = state.settings.bangumi || {};
   c.innerHTML = `
     <div class="view-head"><h1>设置</h1></div>
     <div class="settings-panel">
@@ -919,6 +923,24 @@ function renderSettings(c) {
         </div>
       </div>
       <div class="field">
+        <label>Bangumi 收藏同步</label>
+        <div class="settings-box">
+          <div class="row" style="margin-bottom:8px">
+            <input id="set-bgm-user" type="text" placeholder="Bangumi 用户名" value="${esc(bgm.username || '')}" style="flex:1" />
+          </div>
+          <div class="row" style="margin-bottom:8px">
+            <input id="set-bgm-token" type="password" placeholder="访问令牌（可选，私有收藏需要）" value="${esc(bgm.token || '')}" style="flex:1" />
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <input type="checkbox" id="set-bgm-auto" ${bgm.autoSync ? 'checked' : ''} /> 启动 / 聚焦窗口时自动同步
+          </label>
+          <div class="form-actions" style="margin-top:4px">
+            <button class="btn" data-action="bangumi-sync">🔄 立即同步 Bangumi 收藏</button>
+          </div>
+          <div class="hint" style="margin-top:6px">同步会把 Bangumi 收藏里本程序没有的番剧按收藏状态自动添加（想看→想看、在看→在看、看过→看完等），只新增不覆盖本地进度。私有收藏请在 https://next.bgm.tv/demo/access-token 获取令牌。${bgm.lastSyncAt ? '上次同步：' + esc(formatWatchTime(new Date(bgm.lastSyncAt).toISOString())) : ''}</div>
+        </div>
+      </div>
+      <div class="field">
         <label>数据文件</label>
         <div class="settings-box">
           ${esc(state.dataPath)}<br/>
@@ -929,6 +951,194 @@ function renderSettings(c) {
       <div class="form-actions"><button class="btn btn-primary" data-action="settings-save">保存设置</button></div>
     </div>
   `;
+}
+
+
+/* ---------- 日历 ---------- */
+const cal = { year: 0, month: 0 };
+
+function seasonFromDate(d) {
+  const m = String(d || '').match(/^(\d{4})-(\d{1,2})/);
+  if (!m) return null;
+  const q = [1, 4, 7, 10][Math.floor((Number(m[2]) - 1) / 3)];
+  return m[1] + '-' + String(q).padStart(2, '0');
+}
+
+function broadcastDatesFor(a) {
+  if (Array.isArray(a.airdates) && a.airdates.length) {
+    return a.airdates.map((x) => String(x).slice(0, 10)).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x));
+  }
+  const m = String(a.season || '').match(/^(\d{4})-(01|04|07|10)$/);
+  if (!m || a.updateDay == null) return [];
+  const year = Number(m[1]);
+  const startMonth = Number(m[2]);
+  const out = [];
+  const dt = new Date(year, startMonth - 1, 1);
+  const end = new Date(year, startMonth + 2, 0);
+  while (dt <= end) {
+    if (dt.getDay() === Number(a.updateDay)) {
+      out.push(dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'));
+    }
+    dt.setDate(dt.getDate() + 1);
+  }
+  return out;
+}
+
+function calKey(y, m, d) {
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+
+function calWatchByDate() {
+  const map = {};
+  for (const a of state.anime) {
+    for (const e of (a.watchLog || [])) {
+      const d = String(e.at).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+      if (!map[d]) map[d] = [];
+      const g = map[d].find((x) => x.title === a.title);
+      if (g) g.eps.push(e.episode); else map[d].push({ title: a.title, eps: [e.episode] });
+    }
+  }
+  return map;
+}
+
+function calBroadcastMap() {
+  const map = new Map();
+  for (const a of state.anime) {
+    for (const d of broadcastDatesFor(a)) {
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(a.title);
+    }
+  }
+  return map;
+}
+
+async function fetchMissingAirdates() {
+  const pending = state.anime.filter((a) => a.bgmId && !(Array.isArray(a.airdates) && a.airdates.length));
+  if (!pending.length) return;
+  let got = 0;
+  for (const a of pending) {
+    try {
+      const d = await call(api.bangumiDetail(a.bgmId));
+      if (d && Array.isArray(d.airdates) && d.airdates.length) {
+        await call(api.updateAnime(a.id, { airdates: d.airdates }));
+        got += 1;
+      }
+    } catch (_) { /* 单条失败跳过 */ }
+    await new Promise((r) => setTimeout(r, 900));
+  }
+  if (got > 0 && state.view === 'calendar') {
+    const c = $('#content');
+    if (c) renderCalendar(c);
+    toast('已从 Bangumi 补全 ' + got + ' 部番剧的播出日期', 'success');
+  }
+}
+
+function renderCalendar(c) {
+  if (!cal.year) {
+    const d = new Date();
+    cal.year = d.getFullYear();
+    cal.month = d.getMonth() + 1;
+  }
+  const year = cal.year, month = cal.month;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDow = new Date(year, month - 1, 1).getDay();
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const watchByDate = calWatchByDate();
+  const bcast = calBroadcastMap();
+  const pendingCount = state.anime.filter((a) => a.bgmId && !(Array.isArray(a.airdates) && a.airdates.length)).length;
+  const pendingNote = pendingCount
+    ? '<div class="cal-note">⏳ ' + pendingCount + ' 部番剧缺少播出日期，正在从 Bangumi 补全…</div>'
+    : '';
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell empty"></div>';
+  const monthDaily = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = calKey(year, month, d);
+    const watched = watchByDate[key] || [];
+    const bcasts = (bcast.get(key) || []).slice(0, 3);
+    const more = (bcast.get(key) || []).length - bcasts.length;
+    const cls = ['cal-cell'];
+    if (key === todayKey) cls.push('today');
+    if (watched.length) cls.push('has-watch');
+    if (bcasts.length) cls.push('has-bcast');
+    cells += '<div class="' + cls.join(' ') + '">' +
+      '<div class="cal-day">' + d + '</div>' +
+      watched.map((w) => '<div class="cal-watch">' + esc(w.title) + ' <em>第 ' + w.eps.slice().sort((x, y) => x - y).join('、') + ' 集</em></div>').join('') +
+      bcasts.map((x) => '<div class="cal-bcast">' + esc(x) + '</div>').join('') +
+      (more > 0 ? '<div class="cal-bcast more">…等 ' + (more + bcasts.length) + ' 部</div>' : '') +
+      '</div>';
+    if (watched.length) monthDaily.push({ date: key, items: watched });
+  }
+  const tail = (firstDow + daysInMonth) % 7;
+  for (let i = 0; i < (tail === 0 ? 0 : 7 - tail); i++) cells += '<div class="cal-cell empty"></div>';
+
+  const dailyHtml = monthDaily.length
+    ? monthDaily.map((g) => '<div class="cal-daily-row">' +
+        '<span class="cal-daily-date">' + esc(g.date) + '</span>' +
+        '<span class="cal-daily-items">' + g.items.map((w) => esc(w.title) + ' 第 ' + w.eps.slice().sort((x, y) => x - y).join('、') + ' 集').join('；') + '</span>' +
+      '</div>').join('')
+    : '<div class="cal-note">本月没有观看记录</div>';
+
+  c.innerHTML = `
+    <div class="view-head">
+      <h1>日历</h1>
+      <span class="sub">播出日期 · 每日观看</span>
+      <div class="spacer"></div>
+      <button class="btn" data-action="cal-export">📤 导出 Excel</button>
+    </div>
+    <div class="cal-toolbar">
+      <button class="btn" data-action="cal-prev">‹ 上月</button>
+      <div class="cal-title">${year} 年 ${month} 月</div>
+      <button class="btn" data-action="cal-next">下月 ›</button>
+      <div class="spacer"></div>
+      <div class="cal-legend"><span class="dot bcast"></span>播出&nbsp;&nbsp;<span class="dot watch"></span>观看</div>
+    </div>
+    ${pendingNote}
+    <div class="cal-grid">
+      ${DAY_LABELS.map((h) => '<div class="cal-head">' + h + '</div>').join('')}
+      ${cells}
+    </div>
+    <div class="stats-section-title">本月观看明细</div>
+    <div class="cal-daily-list">${dailyHtml}</div>
+  `;
+  fetchMissingAirdates();
+}
+
+function calMove(delta) {
+  const dt = new Date(cal.year || new Date().getFullYear(), (cal.month || 1) - 1 + delta, 1);
+  cal.year = dt.getFullYear();
+  cal.month = dt.getMonth() + 1;
+  const c = $('#content');
+  if (c) renderCalendar(c);
+}
+
+async function doExportCalendar() {
+  const year = cal.year || new Date().getFullYear();
+  const month = cal.month || new Date().getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const watchByDate = calWatchByDate();
+  const bcast = calBroadcastMap();
+  const schedule = [];
+  const daily = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = calKey(year, month, d);
+    for (const title of (bcast.get(key) || [])) schedule.push({ date: key, title });
+    for (const w of (watchByDate[key] || [])) {
+      daily.push({ date: key, title: w.title, eps: w.eps.slice().sort((x, y) => x - y).join('、') });
+    }
+  }
+  try {
+    const p = await call(api.exportCalendarExcel({
+      title: year + '年' + month + '月',
+      defaultName: '番剧记录-日历-' + year + '-' + String(month).padStart(2, '0') + '.xlsx',
+      schedule,
+      daily,
+    }));
+    if (!p) return;
+    toast('日历 Excel 已导出：' + p, 'success');
+  } catch (e) { /* call 已提示 */ }
 }
 
 /* ---------- 弹窗 ---------- */
@@ -1376,6 +1586,9 @@ async function submitForm() {
   entry.episode = entry.watchLog && entry.watchLog.length
     ? Math.max(...entry.watchLog.map((x) => x.episode))
     : 0;
+  const allWatched = entry.totalEpisodes && entry.watchLog.length >= entry.totalEpisodes;
+  if (allWatched) entry.status = 'completed';
+  else if (modal.type === 'edit' && entry.status === 'plan' && entry.episode > 0) entry.status = 'watching';
   try {
     if (modal.type === 'edit') {
       await call(api.updateAnime(modal.editId, entry));
@@ -1566,6 +1779,7 @@ async function doExport(kind) {
 async function saveSettings() {
   const base = $('#set-base').value.trim();
   const cur = state.settings.autoBackup || {};
+  const curBgm = state.settings.bangumi || {};
   const patch = {
     animeInfoBaseDir: base,
     autoBackup: {
@@ -1575,12 +1789,77 @@ async function saveSettings() {
       folder: $('#ab-folder') ? $('#ab-folder').value.trim() : (cur.folder || ''),
       keep: $('#ab-keep') ? (Number($('#ab-keep').value) || 30) : (cur.keep || 30),
     },
+    bangumi: {
+      ...curBgm,
+      username: $('#set-bgm-user') ? $('#set-bgm-user').value.trim() : (curBgm.username || ''),
+      token: $('#set-bgm-token') ? $('#set-bgm-token').value.trim() : (curBgm.token || ''),
+      autoSync: $('#set-bgm-auto') ? $('#set-bgm-auto').checked : !!curBgm.autoSync,
+    },
   };
   try {
     await call(api.updateSettings(patch));
     toast('设置已保存', 'success');
     await refresh();
   } catch (e) { /* 已提示 */ }
+}
+
+async function doBangumiSync(silent) {
+  const cfg = state.settings.bangumi || {};
+  if (!cfg.username) {
+    if (!silent) toast('请先在设置里填写 Bangumi 用户名', 'warn');
+    return;
+  }
+  let items;
+  try {
+    items = await call(api.bangumiCollections(cfg.username, cfg.token || ''));
+  } catch (e) {
+    if (!silent) toast('同步失败：' + e.message, 'error');
+    return;
+  }
+  const added = [];
+  const skipped = [];
+  for (const it of items) {
+    if (!it.title) continue;
+    const season = seasonFromDate(it.date);
+    if (!season) continue;
+    const exists = state.anime.some((a) =>
+      (a.bgmId && it.bgmId && String(a.bgmId) === String(it.bgmId)) ||
+      (a.title === it.title && a.season === season));
+    if (exists) { skipped.push(it.title); continue; }
+    try {
+      await call(api.addAnime({
+        title: it.title,
+        season,
+        status: it.status,
+        episode: it.episode,
+        totalEpisodes: it.totalEpisodes,
+        bgmId: it.bgmId,
+        coverUrl: it.imageUrl,
+      }));
+      added.push(it.title);
+    } catch (e) {
+      skipped.push(it.title + '（' + e.message + '）');
+    }
+  }
+  let matched = 0;
+  for (const it of items) {
+    const local = state.anime.find((a) => !a.bgmId && a.title === it.title);
+    if (local && it.bgmId) {
+      try {
+        await call(api.updateAnime(local.id, { bgmId: it.bgmId }));
+        matched += 1;
+      } catch (_) { /* 忽略 */ }
+    }
+  }
+  const cfg2 = { ...cfg, lastSyncAt: new Date().toISOString() };
+  try {
+    await call(api.updateSettings({ bangumi: cfg2 }));
+    state.settings.bangumi = cfg2;
+  } catch (_) { /* 忽略 */ }
+  if (!silent || added.length) {
+    toast('Bangumi 同步完成：新增 ' + added.length + ' 部，跳过 ' + skipped.length + ' 部' + (matched ? '，补全 bgmId ' + matched + ' 部' : ''), added.length ? 'success' : 'info');
+  }
+  if (added.length) await refresh();
 }
 
 async function doBackupNow() {
@@ -1655,6 +1934,10 @@ function handleAction(el, e) {
     case 'export-stats': doExportStatsChart(); break;
     case 'export-html-report': openReportModal(); break;
     case 'report-generate': doExportHtmlReport(); break;
+    case 'cal-prev': calMove(-1); break;
+    case 'cal-next': calMove(1); break;
+    case 'cal-export': doExportCalendar(); break;
+    case 'bangumi-sync': doBangumiSync(false); break;
     default: break;
   }
 }

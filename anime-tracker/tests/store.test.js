@@ -194,3 +194,22 @@ test('add rejects duplicate title in same season', () => {
   const b = s.add({ title: 'A', season: '2024-07', status: 'plan', episode: 0 });
   assert.equal(s.count(), 2);
 });
+
+test('bump plan -> watching, then completes at total', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '想看番', season: '2026-07', status: 'plan', episode: 0, totalEpisodes: 2 });
+  const b = s.bump(a.id);
+  assert.equal(b.status, 'watching');
+  assert.equal(b.episode, 1);
+  const c = s.bump(a.id);
+  assert.equal(c.episode, 2);
+  assert.equal(c.status, 'completed');
+});
+
+test('airdates are stored and normalized', () => {
+  const s = tmpStore();
+  s.load();
+  const a = s.add({ title: '带播出日期', season: '2026-07', status: 'watching', episode: 1, airdates: ['2026-07-05', 'bad', '2026-07-12T00:00:00Z'] });
+  assert.deepEqual(a.airdates, ['2026-07-05', '2026-07-12T00:00:00Z'.slice(0, 10)]);
+});

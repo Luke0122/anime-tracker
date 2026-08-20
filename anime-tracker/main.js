@@ -121,6 +121,16 @@ function registerIpc() {
 
   ipcMain.handle('bangumi:search', handle((keyword) => bangumi.search(keyword)));
   ipcMain.handle('bangumi:detail', handle((id) => bangumi.detail(id)));
+  ipcMain.handle('bangumi:collections', handle((username, token) => bangumi.collections(username, token)));
+
+  ipcMain.handle('data:exportCalendarExcel', handle(async (data) => {
+    const r = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: (data && data.defaultName) || `番剧记录-日历-${new Date().toISOString().slice(0, 7)}.xlsx`,
+      filters: [{ name: 'Excel 文件', extensions: ['xlsx'] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    return excel.exportCalendarExcel(r.filePath, data);
+  }));
 
   ipcMain.handle('scan:pickFolder', handle(async () => {
     const r = await dialog.showOpenDialog(mainWindow, {
