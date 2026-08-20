@@ -943,12 +943,26 @@ function renderSettings(c) {
         <div class="settings-box">
           ${esc(state.dataPath)}<br/>
           应用内置每日安全备份 ${state.backupCount} 份（每次修改自动更新、保留最近 30 天，数据损坏时自动恢复）。<br/>
-          手动备份：用上方「立即备份」，或顶部菜单「导出 JSON 备份」；「导入 JSON 备份」可恢复旧备份。
+          <div class="form-actions" style="margin-top:8px">
+            <button class="btn" data-action="import-json">📥 导入 JSON 备份…</button>
+            <button class="btn" data-action="export-json">💾 导出 JSON 备份…</button>
+          </div>
         </div>
       </div>
       <div class="form-actions"><button class="btn btn-primary" data-action="settings-save">保存设置</button></div>
     </div>
   `;
+  const autoEl = $('#set-bgm-auto');
+  if (autoEl) {
+    autoEl.addEventListener('change', () => {
+      const cfg = state.settings.bangumi || {};
+      const next = { ...cfg, autoSync: autoEl.checked };
+      call(api.updateSettings({ bangumi: next })).then(() => {
+        state.settings.bangumi = next;
+        toast(autoEl.checked ? '已开启自动同步' : '已关闭自动同步', 'success');
+      }).catch(() => { /* 已提示 */ });
+    });
+  }
 }
 
 
@@ -1748,42 +1762,6 @@ function scanAdd(el) {
 }
 
 /* ---------- 导入 / 导出 ---------- */
-function openImportModal() {
-  renderModal(`
-    <div class="modal-head"><h2>导入 Excel 记录</h2><button class="modal-close" data-action="close">✕</button></div>
-    <div class="modal-body">
-      <div class="hint">导入你现有的「已经 将要 看.xlsx」（年份 → 季度 → 番名结构）。已存在的条目会自动跳过，不会覆盖已有进度。</div>
-      <div class="row"><button class="btn btn-primary" data-action="import-pick">选择 Excel 文件…</button></div>
-      <div id="i-result"></div>
-    </div>`);
-}
-
-async function doImportPick() {
-  try {
-    const res = await call(api.importExcel());
-    if (!res) return;
-    modal.pendingImport = res.fresh || [];
-    const box = $('#i-result');
-    const preview = (res.fresh || []).slice(0, 20).map((it) =>
-      `<div class="pick-item"><div class="t">${esc(it.title)}</div><div class="meta">${esc(seasonLabel(it.season))}</div></div>`).join('');
-    const more = (res.fresh || []).length > 20 ? `<div class="pick-empty">…共 ${res.fresh.length} 部待导入</div>` : '';
-    box.innerHTML = `
-      <div class="hint">${esc(res.file)} · 共 ${res.total} 条记录：${res.fresh.length} 部新增，${(res.skipped || []).length} 部已存在</div>
-      ${preview}${more}
-      ${res.fresh.length ? '<div class="form-actions"><button class="btn btn-primary" data-action="import-apply">确认导入</button></div>' : ''}
-    `;
-  } catch (e) { /* 已提示 */ }
-}
-
-async function doImportApply() {
-  try {
-    const res = await call(api.importExcelApply(modal.pendingImport));
-    toast(`导入完成：新增 ${res.added.length} 部，跳过 ${res.skipped.length} 部`, 'success');
-    closeModal();
-    await refresh();
-  } catch (e) { /* 已提示 */ }
-}
-
 async function doImportJson() {
   try {
     const res = await call(api.importJson());
@@ -1887,13 +1865,25 @@ async function doBgmFill() {
 }
 
 async function doBangumiEnrich() {
-  const pending = state.anime.filter((a) => a.bgmId);
-  if (!pending.length) { toast('没有需要补全的番剧（还没有带 bgmId 的条目，可先同步收藏或从 Bangumi 添加）', 'info'); return; }
+  const all = state.anime;
+  if (!all.length) { toast('还没有任何番剧记录', 'info'); return; }
+  toast('开始从 Bangumi 补全 ' + all.length + ' 部番剧的信息…', 'info');
   let done = 0;
-  for (const a of pending) {
+  let failed = 0;
+  for (const a of all) {
+    let id = a.bgmId;
+    if (!id) {
+      try {
+        const items = await call(api.searchBangumi(a.title));
+        const hit = items.find((it) => it.title === a.title) || items[0];
+        if (!hit) { failed += 1; continue; }
+        id = hit.bgmId;
+      } catch (_) { failed += 1; continue; }
+    }
     try {
-      const d = await call(api.bangumiDetail(a.bgmId));
+      const d = await call(api.bangumiDetail(id));
       const patch = {};
+      if (id && String(id) !== String(a.bgmId)) patch.bgmId = id;
       if (d.studio && !a.studio) patch.studio = d.studio;
       if (d.tags && !a.tags) patch.tags = d.tags;
       if (d.cast && !a.cast) patch.cast = d.cast;
@@ -1905,10 +1895,10 @@ async function doBangumiEnrich() {
         await call(api.updateAnime(a.id, patch));
         done += 1;
       }
-    } catch (_) { /* 单条失败跳过 */ }
-    await new Promise((r) => setTimeout(r, 800));
+    } catch (_) { failed += 1; }
+    await new Promise((r) => setTimeout(r, 700));
   }
-  toast('Bangumi 信息补全完成：更新 ' + done + ' 部', done ? 'success' : 'info');
+  toast('Bangumi 信息补全完成：更新 ' + done + ' 部' + (failed ? '，失败 ' + failed + ' 部' : ''), done ? 'success' : 'warn');
   await refresh();
 }
 
@@ -1987,7 +1977,9 @@ async function doBangumiSync(silent) {
       } catch (_) { /* 忽略 */ }
     }
   }
-  const cfg2 = { ...(state.settings.bangumi || {}), lastSyncAt: new Date().toISOString() };
+  const autoChk = $('#set-bgm-auto');
+  const autoSync = autoChk ? autoChk.checked : !!(state.settings.bangumi || {}).autoSync;
+  const cfg2 = { ...(state.settings.bangumi || {}), autoSync, lastSyncAt: new Date().toISOString() };
   try {
     await call(api.updateSettings({ bangumi: cfg2 }));
     state.settings.bangumi = cfg2;
@@ -2058,11 +2050,8 @@ function handleAction(el, e) {
     case 'scan-pick': doScanPick(); break;
     case 'scan-run': doScanRun(); break;
     case 'scan-add': scanAdd(el); break;
-    case 'import-excel': openImportModal(); break;
     case 'import-json': doImportJson(); break;
     case 'import-json-confirm': doImportJsonApply(); break;
-    case 'import-pick': doImportPick(); break;
-    case 'import-apply': doImportApply(); break;
     case 'export-excel': doExport('excel'); break;
     case 'export-json': doExport('json'); break;
     case 'settings-save': saveSettings(); break;

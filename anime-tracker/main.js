@@ -147,25 +147,6 @@ function registerIpc() {
     return { ...result, matches: buildMatches(result.groups) };
   }));
 
-  ipcMain.handle('excel:import', handle(async () => {
-    const r = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openFile'],
-      filters: [{ name: 'Excel 文件', extensions: ['xlsx', 'xls'] }],
-      title: '选择要导入的 Excel（如 已经 将要 看.xlsx）',
-    });
-    if (r.canceled || !r.filePaths.length) return null;
-    const items = excel.importExcel(r.filePaths[0]);
-    const fresh = [];
-    const skipped = [];
-    for (const it of items) {
-      const exists = store.list().some((a) => a.title === it.title && a.season === it.season);
-      if (exists) skipped.push(it); else fresh.push(it);
-    }
-    return { file: r.filePaths[0], total: items.length, fresh, skipped };
-  }));
-
-  ipcMain.handle('excel:importApply', handle((items) => store.addMany(items)));
-
   ipcMain.handle('data:exportHtmlReport', handle(async (content, defaultName) => {
     const r = await dialog.showSaveDialog(mainWindow, {
       defaultPath: defaultName || `番剧记录-报告-${new Date().toISOString().slice(0, 10)}.html`,
