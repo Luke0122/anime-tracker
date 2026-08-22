@@ -1169,9 +1169,10 @@ async function fetchMissingAirdates() {
     } catch (_) { /* 单条失败跳过 */ }
     await new Promise((r) => setTimeout(r, 900));
   }
-  if (got > 0 && state.view === 'calendar') {
+  if (got > 0) {
     const c = $('#content');
-    if (c) renderCalendar(c);
+    if (state.view === 'calendar' && c) renderCalendar(c);
+    else if (state.view) render();
     toast('已从 Bangumi 补全 ' + got + ' 部番剧的播出日期', 'success');
   }
 }
