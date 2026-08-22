@@ -2085,10 +2085,27 @@ async function doBangumiSync(silent) {
         const filledLog = fillWatchLog(local.watchLog, target);
         const epChanged = newEp > (local.episode || 0);
         const logChanged = filledLog.length !== (local.watchLog || []).length;
+        let patch = null;
+        if (!(Array.isArray(local.airdates) && local.airdates.length) && local.bgmId) {
+          try {
+            const d = await call(api.bangumiDetail(local.bgmId));
+            if (d) {
+              patch = { ...(patch || {}) };
+              if (Array.isArray(d.airdates) && d.airdates.length) patch.airdates = d.airdates;
+              if (d.studio && !local.studio) patch.studio = d.studio;
+              if (d.tags && !local.tags) patch.tags = d.tags;
+              if (d.cast && !local.cast) patch.cast = d.cast;
+              if (d.summary && !local.summary) patch.summary = d.summary;
+              if (d.imageUrl && !local.coverUrl) { const cl = await cacheCoverUrl(d.imageUrl); if (cl) patch.coverUrl = cl; }
+            }
+          } catch (_) { /* 详情失败则跳过播出日期补全 */ }
+        }
         if (epChanged || logChanged) {
-          const patch = { episode: target, watchLog: filledLog };
+          patch = { ...(patch || {}), episode: target, watchLog: filledLog };
           if (local.totalEpisodes && target >= local.totalEpisodes) patch.status = 'completed';
           else if (local.status === 'plan' && target > 0) patch.status = 'watching';
+        }
+        if (patch && Object.keys(patch).length) {
           try {
             await call(api.updateAnime(local.id, patch));
             progressUpdated += 1;
