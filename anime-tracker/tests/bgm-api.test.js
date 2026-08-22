@@ -104,6 +104,36 @@ test('detail normalizes total episodes and summary', async () => {
   }
 });
 
+test('fetchAirdates maps and dedupes episode air dates', async () => {
+  const restore = mockFetch({
+    '/eps': {
+      total: 3,
+      data: [
+        { ep: 1, airdate: '2026-07-06' },
+        { ep: 2, airdate: '2026-07-13' },
+        { ep: 3, airdate: '2026-07-06' },
+        { ep: 4, air_date: '2026-07-20' },
+      ],
+    },
+  });
+  try {
+    const aired = await bangumi.fetchAirdates(456081);
+    assert.deepEqual(await aired, ['2026-07-06', '2026-07-13', '2026-07-20']);
+  } finally {
+    restore();
+  }
+});
+
+test('fetchAirdates returns [] when eps endpoint is unavailable', async () => {
+  const restore = mockFetch({}); // no /eps mock -> every fetch fails
+  try {
+    const aired = await bangumi.fetchAirdates(456081);
+    assert.deepEqual(await aired, []);
+  } finally {
+    restore();
+  }
+});
+
 test('empty keyword throws', async () => {
   await assert.rejects(() => bangumi.search('   '), /关键词/);
 });
