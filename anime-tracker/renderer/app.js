@@ -2067,6 +2067,7 @@ async function doBangumiSync(silent) {
   const added = [];
   const skipped = [];
   let progressUpdated = 0;
+  let airdatesFilled = 0;
   for (const it of items) {
     if (!it.title) continue;
     const season = seasonFromDate(it.date);
@@ -2091,7 +2092,7 @@ async function doBangumiSync(silent) {
             const d = await call(api.bangumiDetail(local.bgmId));
             if (d) {
               patch = { ...(patch || {}) };
-              if (Array.isArray(d.airdates) && d.airdates.length) patch.airdates = d.airdates;
+              if (Array.isArray(d.airdates) && d.airdates.length) { patch.airdates = d.airdates; airdatesFilled += 1; }
               if (d.studio && !local.studio) patch.studio = d.studio;
               if (d.tags && !local.tags) patch.tags = d.tags;
               if (d.cast && !local.cast) patch.cast = d.cast;
@@ -2171,7 +2172,7 @@ async function doBangumiSync(silent) {
     state.settings.bangumi = cfg2;
   } catch (_) { /* 忽略 */ }
   if (!silent || added.length || progressUpdated) {
-    toast('Bangumi 同步完成：新增 ' + added.length + ' 部，更新进度 ' + progressUpdated + ' 部，跳过 ' + skipped.length + ' 部' + (matched ? '，补全 bgmId ' + matched + ' 部' : ''), (added.length || progressUpdated) ? 'success' : 'info');
+    toast('Bangumi 同步完成：新增 ' + added.length + ' 部，更新进度 ' + progressUpdated + ' 部，补全播出日期 ' + airdatesFilled + ' 部，跳过 ' + skipped.length + ' 部' + (matched ? '，补全 bgmId ' + matched + ' 部' : ''), (added.length || progressUpdated || airdatesFilled) ? 'success' : 'info');
   }
   if (added.length || progressUpdated) await refresh();
 }
