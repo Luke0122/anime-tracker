@@ -39,6 +39,14 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
 }[c]));
 
 // 读取 CSS 主题变量（供 canvas 图表使用，深浅色自适应）
+async function cacheCoverUrl(url) {
+  if (!url || /^(cover|data):/i.test(String(url))) return url || null;
+  try {
+    const local = await call(api.cacheCover(url));
+    return local || url || null;
+  } catch (_) { return url || null; }
+}
+
 const cssVar = (name, fb) => {
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -1109,7 +1117,13 @@ async function fetchMissingAirdates() {
       if (d.tags && !a.tags) patch.tags = d.tags;
       if (d.cast && !a.cast) patch.cast = d.cast;
       if (d.summary && !a.summary) patch.summary = d.summary;
-      if (d.imageUrl && !a.coverUrl) patch.coverUrl = d.imageUrl;
+      if (d.imageUrl && !a.coverUrl) {
+        const coverLocal = await cacheCoverUrl(d.imageUrl);
+        if (coverLocal) patch.coverUrl = coverLocal;
+      } else if (a.coverUrl && /^https?:/i.test(a.coverUrl)) {
+        const coverLocal = await cacheCoverUrl(a.coverUrl);
+        if (coverLocal && coverLocal !== a.coverUrl) patch.coverUrl = coverLocal;
+      }
       if (Object.keys(patch).length) {
         await call(api.updateAnime(a.id, patch));
         got += 1;
@@ -1611,12 +1625,13 @@ async function doBgmSearch() {
 async function doBgmDetail(id) {
   try {
     const d = await call(api.bangumiDetail(id));
+    const coverLocal = await cacheCoverUrl(d.imageUrl);
     const v = {
       title: d.title || '',
       totalEpisodes: d.totalEpisodes ?? d.eps ?? null,
       bgmId: d.bgmId,
       bgmUrl: null,
-      coverUrl: d.imageUrl,
+      coverUrl: coverLocal,
       summary: d.summary,
       studio: d.studio || '',
       tags: d.tags || '',
@@ -1630,7 +1645,7 @@ async function doBgmDetail(id) {
       }
     }
     fillForm(v);
-    modal.selected = { bgmId: d.bgmId, coverUrl: d.imageUrl, summary: d.summary, airdates: d.airdates || [] };
+    modal.selected = { bgmId: d.bgmId, coverUrl: coverLocal, summary: d.summary, airdates: d.airdates || [] };
     switchTab('manual');
     toast(`已从 Bangumi 填充「${v.title}」，可修改后保存`, 'success');
   } catch (e) {
@@ -1650,11 +1665,12 @@ async function autoFillFromBangumi(title, bgmId) {
   }
   try {
     const d = await call(api.bangumiDetail(id));
+    const coverLocal = await cacheCoverUrl(d.imageUrl);
     const v = {
       title: d.title || title,
       totalEpisodes: d.totalEpisodes != null ? d.totalEpisodes : null,
       bgmId: d.bgmId || id,
-      coverUrl: d.imageUrl,
+      coverUrl: coverLocal,
       summary: d.summary,
       studio: d.studio || '',
       tags: d.tags || '',
@@ -1961,7 +1977,13 @@ async function doBangumiEnrich() {
       if (d.cast && !a.cast) patch.cast = d.cast;
       if (d.summary && !a.summary) patch.summary = d.summary;
       if (Array.isArray(d.airdates) && d.airdates.length && !(Array.isArray(a.airdates) && a.airdates.length)) patch.airdates = d.airdates;
-      if (d.imageUrl && !a.coverUrl) patch.coverUrl = d.imageUrl;
+      if (d.imageUrl && !a.coverUrl) {
+        const coverLocal = await cacheCoverUrl(d.imageUrl);
+        if (coverLocal) patch.coverUrl = coverLocal;
+      } else if (a.coverUrl && /^https?:/i.test(a.coverUrl)) {
+        const coverLocal = await cacheCoverUrl(a.coverUrl);
+        if (coverLocal && coverLocal !== a.coverUrl) patch.coverUrl = coverLocal;
+      }
       if (d.totalEpisodes && !a.totalEpisodes) patch.totalEpisodes = d.totalEpisodes;
       if (Object.keys(patch).length) {
         await call(api.updateAnime(a.id, patch));
@@ -2046,6 +2068,7 @@ async function doBangumiSync(silent) {
           extra.totalEpisodes = d.totalEpisodes != null ? d.totalEpisodes : it.totalEpisodes;
         } catch (_) { /* 详情失败则用收藏基础信息 */ }
       }
+      const coverUrlLocal = await cacheCoverUrl(extra.coverUrl || it.imageUrl || '');
       await call(api.addAnime({
         title: it.title,
         season,
@@ -2053,7 +2076,7 @@ async function doBangumiSync(silent) {
         episode: it.episode,
         totalEpisodes: extra.totalEpisodes != null ? extra.totalEpisodes : it.totalEpisodes,
         bgmId: it.bgmId,
-        coverUrl: extra.coverUrl || it.imageUrl || '',
+        coverUrl: coverUrlLocal,
         studio: extra.studio || '',
         tags: extra.tags || '',
         cast: extra.cast || '',

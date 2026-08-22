@@ -10,7 +10,10 @@ const bangumi = require('./lib/bangumi');
 const excel = require('./lib/excel');
 const backup = require('./lib/backup');
 const { shouldUseMica } = require('./lib/platform');
+const crypto = require('crypto');
 const DEFAULT_BACKUP_FOLDER = 'D:\\ANIME\\anime-tracker\\自动备份';
+const COVER_CACHE_DIR = () => path.join(app.getPath('userData'), 'covers');
+const BUNDLED_COVER_DIR = () => path.join(__dirname, 'data', 'covers');
 
 // 注册封面自定义协议（从应用包内读取内置封面）
 protocol.registerSchemesAsPrivileged([
@@ -124,6 +127,27 @@ function registerIpc() {
     const saved = store.updateSettings(patch);
     if (patch && patch.theme) applyTheme(patch.theme);
     return saved;
+  }));
+
+  // 把远程封面下载到本地缓存，返回 cover://local/<md5>.jpg（命中内置/缓存则直接返回）
+  ipcMain.handle('cover:cache', handle(async (url) => {
+    const src = String(url || '').trim();
+    if (!src) return null;
+    if (/^(cover|data):/i.test(src)) return src;
+    if (!/^https?:\/\//i.test(src)) return src;
+    try {
+      const name = crypto.createHash('md5').update(src, 'utf8').digest('hex') + '.jpg';
+      if (!fs.existsSync(path.join(BUNDLED_COVER_DIR(), name)) && !fs.existsSync(path.join(COVER_CACHE_DIR(), name))) {
+        fs.mkdirSync(COVER_CACHE_DIR(), { recursive: true });
+        const res = await global.fetch(src, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeAutoBot/1.0' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const buf = Buffer.from(await res.arrayBuffer());
+        fs.writeFileSync(path.join(COVER_CACHE_DIR(), name), buf);
+      }
+      return 'cover://local/' + name;
+    } catch (_) {
+      return src; // 失败回退远程地址
+    }
   }));
 
   ipcMain.handle('season:list', handle(() => {
@@ -261,8 +285,12 @@ app.whenReady().then(() => {
   protocol.handle('cover', async (request) => {
     try {
       const u = new URL(request.url);
-      const filePath = path.join(__dirname, 'data', 'covers', path.basename(u.pathname));
-      const data = await fs.promises.readFile(filePath);
+      const name = path.basename(u.pathname);
+      const cachePath = path.join(COVER_CACHE_DIR(), name);
+      const bundledPath = path.join(BUNDLED_COVER_DIR(), name);
+      let file = cachePath;
+      if (!fs.existsSync(cachePath)) file = bundledPath;
+      const data = await fs.promises.readFile(file);
       return new Response(data, { headers: { 'Content-Type': 'image/jpeg' } });
     } catch (_) {
       return new Response('', { status: 404 });
