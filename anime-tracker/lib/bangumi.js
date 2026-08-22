@@ -147,6 +147,33 @@ function normalizeDetail(s) {
   };
 }
 
+// 拉取单部番剧的逐集播出日期。只请求轻量 /eps 接口（不重复取主体详情 + 角色），
+// 降低 Bangumi 限流风险；映射 air-date/air_date 新旧字段，去重排序，失败返回 []。
+async function fetchAirdates(id) {
+  const path = `/v0/subjects/${encodeURIComponent(id)}/eps?type=0&limit=100&offset=0`;
+  const headers = { 'User-Agent': UA, 'Accept': 'application/json' };
+  let epsRes;
+  try {
+    epsRes = await fetchJson(`https://api.bgm.tv${path}`, { headers });
+  } catch (_) {
+    try {
+      const ip = await resolveViaDoh('api.bgm.tv');
+      if (!ip) throw new Error('DoH 无法解析');
+      epsRes = await httpGetToIp(ip, 'api.bgm.tv', path);
+    } catch (_2) {
+      return [];
+    }
+  }
+  const episodes = (epsRes && Array.isArray(epsRes.data)) ? epsRes.data : [];
+  const aired = episodes
+    .map((e) => {
+      const raw = (e && (e.airdate || e.air_date)) || '';
+      return /^\d{4}-\d{2}-\d{2}/.test(String(raw)) ? String(raw).slice(0, 10) : '';
+    })
+    .filter(Boolean);
+  return [...new Set(aired)].sort();
+}
+
 async function search(keyword) {
   const kw = String(keyword || '').trim();
   if (!kw) throw new Error('请输入番名关键词');
@@ -192,13 +219,8 @@ async function detail(id) {
         d.cast = castFromCharacters(chars);
       } catch (_) { d.cast = null; }
       // 播出日期在单独的 episodes 接口里（主题详情不带 eps）
-      try {
-        const epsRes = await fetchJson(`${DETAIL_URL}/${encodeURIComponent(id)}/eps?type=0&limit=100&offset=0`, {
-          headers: { 'User-Agent': UA, 'Accept': 'application/json' },
-        });
-        const aired = (epsRes && epsRes.data || []).map((e) => e && e.airdate ? String(e.airdate).slice(0, 10) : '').filter(Boolean).sort();
-        if (aired.length) d.airdates = aired;
-      } catch (_) { /* 播出日期获取失败则保持原值 */ }
+      const aired = await fetchAirdates(id);
+      if (aired.length) d.airdates = aired;
       return d;
     }
   } catch (_) { /* fall through */ }
@@ -266,4 +288,4 @@ async function collections(uid) {
   return out;
 }
 
-module.exports = { search, detail, collections };
+module.exports = { search, detail, collections, fetchAirdates };

@@ -1148,26 +1148,13 @@ async function fetchMissingAirdates() {
   let got = 0;
   for (const a of pending) {
     try {
-      const d = await call(api.bangumiDetail(a.bgmId));
-      const patch = {};
-      if (Array.isArray(d.airdates) && d.airdates.length && !(Array.isArray(a.airdates) && a.airdates.length)) patch.airdates = d.airdates;
-      if (d.studio && !a.studio) patch.studio = d.studio;
-      if (d.tags && !a.tags) patch.tags = d.tags;
-      if (d.cast && !a.cast) patch.cast = d.cast;
-      if (d.summary && !a.summary) patch.summary = d.summary;
-      if (d.imageUrl && !a.coverUrl) {
-        const coverLocal = await cacheCoverUrl(d.imageUrl);
-        if (coverLocal) patch.coverUrl = coverLocal;
-      } else if (a.coverUrl && /^https?:/i.test(a.coverUrl)) {
-        const coverLocal = await cacheCoverUrl(a.coverUrl);
-        if (coverLocal && coverLocal !== a.coverUrl) patch.coverUrl = coverLocal;
-      }
-      if (Object.keys(patch).length) {
-        await call(api.updateAnime(a.id, patch));
+      const aired = await call(api.fetchAirdates(a.bgmId));
+      if (Array.isArray(aired) && aired.length && !(Array.isArray(a.airdates) && a.airdates.length)) {
+        await call(api.updateAnime(a.id, { airdates: aired }));
         got += 1;
       }
     } catch (_) { /* 单条失败跳过 */ }
-    await new Promise((r) => setTimeout(r, 900));
+    await new Promise((r) => setTimeout(r, 1200));
   }
   if (got > 0) {
     const c = $('#content');
@@ -2029,7 +2016,7 @@ async function doBangumiEnrich() {
         done += 1;
       }
     } catch (_) { failed += 1; }
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 1100));
   }
   toast('Bangumi 信息补全完成：更新 ' + done + ' 部' + (failed ? '，失败 ' + failed + ' 部' : ''), done ? 'success' : 'warn');
   await refresh();
@@ -2089,17 +2076,9 @@ async function doBangumiSync(silent) {
         let patch = null;
         if (!(Array.isArray(local.airdates) && local.airdates.length) && local.bgmId) {
           try {
-            const d = await call(api.bangumiDetail(local.bgmId));
-            if (d) {
-              patch = { ...(patch || {}) };
-              if (Array.isArray(d.airdates) && d.airdates.length) { patch.airdates = d.airdates; airdatesFilled += 1; }
-              if (d.studio && !local.studio) patch.studio = d.studio;
-              if (d.tags && !local.tags) patch.tags = d.tags;
-              if (d.cast && !local.cast) patch.cast = d.cast;
-              if (d.summary && !local.summary) patch.summary = d.summary;
-              if (d.imageUrl && !local.coverUrl) { const cl = await cacheCoverUrl(d.imageUrl); if (cl) patch.coverUrl = cl; }
-            }
-          } catch (_) { /* 详情失败则跳过播出日期补全 */ }
+            const aired = await call(api.fetchAirdates(local.bgmId));
+            if (Array.isArray(aired) && aired.length) { patch = { ...(patch || {}), airdates: aired }; airdatesFilled += 1; }
+          } catch (_) { /* 播出日期获取失败则跳过 */ }
         }
         if (epChanged || logChanged) {
           patch = { ...(patch || {}), episode: target, watchLog: filledLog };
@@ -2152,7 +2131,7 @@ async function doBangumiSync(silent) {
     } catch (e) {
       skipped.push(it.title + '（' + e.message + '）');
     }
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 900));
   }
   let matched = 0;
   for (const it of items) {

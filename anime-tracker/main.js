@@ -178,6 +178,7 @@ function registerIpc() {
   ipcMain.handle('bangumi:search', handle((keyword) => bangumi.search(keyword)));
   ipcMain.handle('bangumi:detail', handle((id) => bangumi.detail(id)));
   ipcMain.handle('bangumi:collections', handle((uid) => bangumi.collections(uid)));
+  ipcMain.handle('bangumi:airdates', handle((id) => bangumi.fetchAirdates(id)));
 
   ipcMain.handle('data:exportCalendarExcel', handle(async (data) => {
     const r = await dialog.showSaveDialog(mainWindow, {
