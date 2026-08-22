@@ -39,6 +39,15 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
 }[c]));
 
 // 读取 CSS 主题变量（供 canvas 图表使用，深浅色自适应）
+// 把观看记录补全到第 n 集（缺失的用当前时间标记）
+function fillWatchLog(log, count) {
+  const arr = (log || []).filter((x) => x && Number.isInteger(Number(x.episode)) && Number(x.episode) >= 1);
+  const map = new Map(arr.map((e) => [Number(e.episode), e.at]));
+  const now = new Date().toISOString();
+  for (let ep = 1; ep <= count; ep++) if (!map.has(ep)) map.set(ep, now);
+  return Array.from(map.entries()).map(([episode, at]) => ({ episode, at })).sort((a, b) => a.episode - b.episode);
+}
+
 async function cacheCoverUrl(url) {
   if (!url || /^(cover|data):/i.test(String(url))) return url || null;
   try {
@@ -2041,14 +2050,20 @@ async function doBangumiSync(silent) {
         (a.bgmId && it.bgmId && String(a.bgmId) === String(it.bgmId)) ||
         (a.title === it.title && a.season === season));
       const newEp = Number(it.episode) || 0;
-      if (local && newEp > (local.episode || 0)) {
-        const patch = { episode: newEp };
-        if (local.totalEpisodes && newEp >= local.totalEpisodes) patch.status = 'completed';
-        else if (local.status === 'plan' && newEp > 0) patch.status = 'watching';
-        try {
-          await call(api.updateAnime(local.id, patch));
-          progressUpdated += 1;
-        } catch (_) { /* 忽略 */ }
+      if (local) {
+        const target = Math.max(newEp, local.episode || 0);
+        const filledLog = fillWatchLog(local.watchLog, target);
+        const epChanged = newEp > (local.episode || 0);
+        const logChanged = filledLog.length !== (local.watchLog || []).length;
+        if (epChanged || logChanged) {
+          const patch = { episode: target, watchLog: filledLog };
+          if (local.totalEpisodes && target >= local.totalEpisodes) patch.status = 'completed';
+          else if (local.status === 'plan' && target > 0) patch.status = 'watching';
+          try {
+            await call(api.updateAnime(local.id, patch));
+            progressUpdated += 1;
+          } catch (_) { /* 忽略 */ }
+        }
       }
       skipped.push(it.title);
       continue;
@@ -2069,11 +2084,13 @@ async function doBangumiSync(silent) {
         } catch (_) { /* 详情失败则用收藏基础信息 */ }
       }
       const coverUrlLocal = await cacheCoverUrl(extra.coverUrl || it.imageUrl || '');
+      const watchLogFill = fillWatchLog([], Number(it.episode) || 0);
       await call(api.addAnime({
         title: it.title,
         season,
         status: it.status,
         episode: it.episode,
+        watchLog: watchLogFill,
         totalEpisodes: extra.totalEpisodes != null ? extra.totalEpisodes : it.totalEpisodes,
         bgmId: it.bgmId,
         coverUrl: coverUrlLocal,
