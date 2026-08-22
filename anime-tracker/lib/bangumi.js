@@ -237,12 +237,15 @@ async function collections(uid) {
   const maxItems = 500;
   while (offset < maxItems) {
     let data;
+    const urlPath = `/v0/users/${encodeURIComponent(user)}/collections?subject_type=2&limit=${limit}&offset=${offset}`;
     try {
-      data = await fetchJson(
-        `https://api.bgm.tv/v0/users/${encodeURIComponent(user)}/collections?subject_type=2&limit=${limit}&offset=${offset}`,
-        { headers },
-      );
-    } catch (_) { break; }
+      data = await fetchJson(`https://api.bgm.tv${urlPath}`, { headers });
+    } catch (_) {
+      try {
+        const ip = await resolveViaDoh('api.bgm.tv');
+        if (ip) data = await httpGetToIp(ip, 'api.bgm.tv', urlPath);
+      } catch (_) { break; }
+    }
     const rows = (data && data.data) || [];
     for (const row of rows) {
       const sub = row.subject || {};
