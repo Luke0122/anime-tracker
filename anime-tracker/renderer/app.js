@@ -155,6 +155,26 @@ async function init() {
     if (mq.addEventListener) mq.addEventListener('change', repaintStats);
     else if (mq.addListener) mq.addListener(repaintStats);
   }
+  // 后台：补全每集播出日期（用于显示「已播到第 N 集」）+ 本地化封面
+  setTimeout(() => { fetchMissingAirdates(); }, 6000);
+  setTimeout(() => { cacheRemoteCovers(); }, 9000);
+}
+
+// 把已有条目的远程封面转成本地缓存（后台、每次会话一次）
+async function cacheRemoteCovers() {
+  const pending = state.anime.filter((a) => /^https?:\/\//i.test(a.coverUrl || ''));
+  if (!pending.length) return;
+  let done = 0;
+  for (const a of pending) {
+    try {
+      const local = await cacheCoverUrl(a.coverUrl);
+      if (local && local !== a.coverUrl) {
+        await call(api.updateAnime(a.id, { coverUrl: local }));
+        done += 1;
+      }
+    } catch (_) { /* 单条失败跳过 */ }
+  }
+  if (done) await refresh();
 }
 
 async function refresh() {
@@ -217,8 +237,10 @@ function cardHTML(a) {
   const cover = a.coverUrl
     ? `<img class="card-cover" src="${esc(a.coverUrl)}" alt="" />`
     : `<div class="card-cover-placeholder">🎬</div>`;
+  const aired = airedCount(a);
   const bits = [
     total ? `${ep} / ${total} 集` : (ep > 0 ? `看到第 ${ep} 集` : '还没开始看'),
+    aired > 0 ? `已播到第 ${aired} 集` : '',
     a.updateDay != null ? DAY_LABELS[a.updateDay] : '',
     a.rating != null ? `我的评分 ${a.rating}` : '',
   ].filter(Boolean);
@@ -1055,6 +1077,13 @@ function baseTitle(t) {
     .replace(/[#＃]\d+(?:[~～-]\d+)?$/, '')
     .replace(/第\s*([一二三四五六七八九十\d]+)\s*(期|季|シーズン|クール)?\s*$/, '')
     .trim();
+}
+
+// 已播出集数（每集播出日期 <= 今天 的数量）
+function airedCount(a) {
+  const today = new Date().toISOString().slice(0, 10);
+  const eps = (a && a.airdates || []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today);
+  return eps.length || 0;
 }
 
 function seasonFromDate(d) {

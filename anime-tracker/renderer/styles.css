@@ -680,3 +680,6 @@ input, select, textarea { font-family: inherit; font-size: 13px; color: var(--te
 .cal-daily-date { color: var(--accent-2); font-weight: 700; min-width: 92px; }
 .card { cursor: pointer; }
 .cal-daily-items { color: var(--text); line-height: 1.6; }
+/* 下拉框统一圆角（按钮本身；系统弹出的列表由 Windows 绘制，无法由样式控制） */
+select { border-radius: var(--radius-sm); }
+select option { background: var(--panel); color: var(--text); }
