@@ -191,6 +191,14 @@ async function detail(id) {
         });
         d.cast = castFromCharacters(chars);
       } catch (_) { d.cast = null; }
+      // 播出日期在单独的 episodes 接口里（主题详情不带 eps）
+      try {
+        const epsRes = await fetchJson(`${DETAIL_URL}/${encodeURIComponent(id)}/eps?type=0&limit=100&offset=0`, {
+          headers: { 'User-Agent': UA, 'Accept': 'application/json' },
+        });
+        const aired = (epsRes && epsRes.data || []).map((e) => e && e.airdate ? String(e.airdate).slice(0, 10) : '').filter(Boolean).sort();
+        if (aired.length) d.airdates = aired;
+      } catch (_) { /* 播出日期获取失败则保持原值 */ }
       return d;
     }
   } catch (_) { /* fall through */ }
